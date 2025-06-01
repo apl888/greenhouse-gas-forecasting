@@ -6,6 +6,7 @@ The data is **not stored** in this repository. Instead, it is loaded dynamically
 
 To inspect or modify the data sources, see the dataset dictionary in the code:
 
+'''python
 datasets = {
     'CH4': 'https://gml.noaa.gov/aftp/data/trace_gases/ch4/flask/surface/txt/ch4_mlo_surface-flask_1_ccgg_event.txt',
     'N2O': 'https://gml.noaa.gov/aftp/data/trace_gases/n2o/flask/surface/txt/n2o_mlo_surface-flask_1_ccgg_event.txt',

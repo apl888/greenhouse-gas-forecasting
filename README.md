@@ -34,10 +34,10 @@ Method and Workflow
 
 3.  Modeling and Forecasting
       - split the preprocessed CH4 series into training and test sets
-   - applied log transform to stabilize variance
-   - used Atuo-ARIMA to identify strarting SARIMA parameters
-   - final SARIMA model chosen based on both Auto-ARIMA suggestions and empirical tuning
-   - forecasted 13 weeks ahead with 95% confidence intervals
+      - applied log transform to stabilize variance
+      - used Atuo-ARIMA to identify strarting SARIMA parameters
+      - final SARIMA model chosen based on both Auto-ARIMA suggestions and empirical tuning
+      - forecasted 13 weeks ahead with 95% confidence intervals
 
 4. Forecast Evaluation
    - custom forecast_metrics() function computes forecast performance

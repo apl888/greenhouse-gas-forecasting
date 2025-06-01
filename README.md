@@ -3,7 +3,7 @@ SARIMA-based forecasting of Mauna Loa methane gas concentration data from NOAA
 
 This project forecasts weekly atmospheric concentrations of greenhouse gases using time series modeling techniques. Although six gases were loaded into the dataset, this analysis focuses on methane (CH4) due to its significant role in climate change.
 
-The core objective is to preprocess CH₄ time series data and produce a forecast using a SARIMA model, aided by auto-ARIMA selection and manual refinement.
+The core objective is to preprocess CH4 time series data and produce a forecast using a SARIMA model, aided by auto-ARIMA selection and manual refinement.
 
 Project Overview
 - Load and preprocess flask collected CH4 conectration data from NOAA Mauna Loa Observatory

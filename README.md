@@ -33,7 +33,7 @@ Method and Workflow
    - provides a fit() and transform() interface
 
 3.  Modeling and Forecasting
-   - split the preprocessed CH4 series into training and test sets
+      - split the preprocessed CH4 series into training and test sets
    - applied log transform to stabilize variance
    - used Atuo-ARIMA to identify strarting SARIMA parameters
    - final SARIMA model chosen based on both Auto-ARIMA suggestions and empirical tuning

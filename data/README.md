@@ -15,4 +15,10 @@ datasets = {
     'CO': 'https://gml.noaa.gov/aftp/data/trace_gases/co/flask/surface/txt/co_mlo_surface-flask_1_ccgg_event.txt',
     'H2': 'https://gml.noaa.gov/aftp/data/trace_gases/h2/flask/surface/txt/h2_mlo_surface-flask_1_ccgg_event.txt'
 }
+```
 
+This project uses a simplified version of NOAA's dataset, keeping only:  
+- `datetime`: Timestamp of measurement  
+- `value`: Gas concentration (units vary by gas)  
+
+For the full dataset schema, see [DATA_DICTIONARY.md](DATA_DICTIONARY.md).  

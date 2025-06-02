@@ -1,4 +1,9 @@
 # greenhouse-gas-forecasting
+
+This project uses data from the [NOAA Global Monitoring Laboratory](https://gml.noaa.gov/). If you use this repository, please cite teh original data source:
+
+> Lan, X., J.W. Mund, A.M. Crotwell, K.W. Thoning, E. Moglia, M. Madronich, K. Baugh, G. Petron, M.J. Crotwell, D. Neff, S. Wolter, T. Mefford and S. DeVogel (2025), Atmospheric Methane Dry Air Mole Fractions from the NOAA GML Carbon Cycle Cooperative Global Air Sampling Network, 1983-2024,  Version: 2025-04-26, https://doi.org/10.15138/VNCZ-M766
+
 SARIMA-based forecasting of Mauna Loa methane gas concentration data from NOAA
 
 This project forecasts weekly atmospheric concentrations of greenhouse gases using time series modeling techniques. Although six gases were loaded into the dataset, this analysis focuses on methane (CH4) due to its significant role in climate change.

@@ -1,8 +1,9 @@
 # Data
 
+## Attribution
 This project uses publicly available greenhouse gas concentration data from NOAA's Mauna Loa Observatory.
 
-The data is **not stored** in this repository. Instead, it is loaded dynamically from NOAA's website using the script in the analysis notebook or code.
+The data is dynamically loaded from NOAA's servers. **Always cite the original dataset**—see the [main citation](../README.md#data-citation) for details.  
 
 To inspect or modify the data sources, see the dataset dictionary in the code:
 

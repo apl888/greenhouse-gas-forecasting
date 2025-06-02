@@ -1,7 +1,7 @@
 # greenhouse-gas-forecasting
 
 ## Data Citation
-This project uses data from the [NOAA Global Monitoring Laboratory](https://gml.noaa.gov/). If you use this repository, please cite teh original data source:
+This project uses data from the [NOAA Global Monitoring Laboratory](https://gml.noaa.gov/). If you use this repository, please cite the original data source:
 
 > Lan, X., J.W. Mund, A.M. Crotwell, K.W. Thoning, E. Moglia, M. Madronich, K. Baugh, G. Petron, M.J. Crotwell, D. Neff, S. Wolter, T. Mefford and S. DeVogel (2025), Atmospheric Methane Dry Air Mole Fractions from the NOAA GML Carbon Cycle Cooperative Global Air Sampling Network, 1983-2024,  Version: 2025-04-26, https://doi.org/10.15138/VNCZ-M766
 

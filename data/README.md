@@ -5,6 +5,7 @@ This project uses publicly available greenhouse gas concentration data from NOAA
 
 The data is dynamically loaded from NOAA's servers. **Always cite the original dataset**—see the [main citation](../README.md#data-citation) for details.  
 
+## Datasets
 To inspect or modify the data sources, see the dataset dictionary in the code:
 
 ```python

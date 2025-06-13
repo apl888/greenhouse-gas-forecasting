@@ -4,7 +4,7 @@ This directory contains the final SARIMA models for CH4 (methane) concentration 
 
 ## Files
 
-### 1. `CH4_best_sarima.pkl`  
+### 1. `CH4_best_model_config.json`  
 **Model**: SARIMA(2,1,0)(1,0,2,52)  
 **Purpose**: Best-performing model on training data  
 **Selection Criteria**:  
@@ -19,7 +19,7 @@ This directory contains the final SARIMA models for CH4 (methane) concentration 
 - Non-seasonal AR(2) + I(1) differencing  
 - Seasonal MA terms at lags 52 and 104  
 
-### 2. `CH4_full_dataset_best_sarima.pkl`  
+### 2. `CH4_full_dataset_best_model_config.json`  
 **Model**: SARIMA(1,1,0)(1,0,2,52)  
 **Purpose**: Production model fit on full dataset  
 **Optimization**:  
@@ -36,10 +36,11 @@ This directory contains the final SARIMA models for CH4 (methane) concentration 
 ## Usage
 
 ```python
-import joblib
+import json
 
-# Load model
-model = joblib.load('CH4_full_dataset_best_sarima.pkl')['results']
+# Load model configuration
+with open('../results/CH4_train_best_model_config.json', 'r') as f:
+    config = json.load(f)
 
 # Forecast
 forecast = model.get_forecast(steps=52)

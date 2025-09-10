@@ -324,7 +324,7 @@ class GasPreprocessor:
         df.set_index('date', inplace=True)
 
         # trim the new data to start from the same date as in fit()
-        new_series = df[self.gas_name_].loc[self.start_date_:]
+        new_series = df[self.gas_name].loc[self.start_date_:]
         
         # Resample the new data to the same frequency used in fit()
         new_resampled = new_series.resample(self.resample_freq).mean()

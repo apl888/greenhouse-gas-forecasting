@@ -256,12 +256,12 @@ class GasPreprocessor:
                 self._plot_decomposition(self.stl_result_)
                 self.test_heteroscedasticity(self.stl_result_.resid, label='Heteroscedasticity Tests of Residuals')
 
-            else:
-                # If not doing EDA, we still need to fit the STL model for potential later use
-                self.stl_result_ = STL(interpolated, period=self.seasonal_period, robust=True).fit()
+        else:
+            # If not doing EDA, we still need to fit the STL model for potential later use
+            self.stl_result_ = STL(interpolated, period=self.seasonal_period, robust=True).fit()
 
-            self.trained_ = True
-            return self
+        self.trained_ = True
+        return self
 
     def transform(self, df, custom_title=None):
         '''

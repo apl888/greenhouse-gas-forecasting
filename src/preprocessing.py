@@ -203,19 +203,19 @@ class GasPreprocessor:
         plt.tight_layout()
         plt.show()
 
-    def fit(self, df, custom_title=None):
-        # ensure that negative values have been converted to NaN
-        negative_mask = raw_series < 0
-        if negative_mask.any():
-            print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
-            raw_series = raw_series.where(raw_series >= 0, np.nan)
-            
+    def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
         df = df.copy()
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
         raw_series = df[self.gas_name]
+        
+        # ensure that negative values have been converted to NaN
+        negative_mask = raw_series < 0
+        if negative_mask.any():
+            print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
+            raw_series = raw_series.where(raw_series >= 0, np.nan)
 
         # Handle missing dates and get a uniform frequency by resampling.
         # This creates a 'preliminary' series for the decomposition step.

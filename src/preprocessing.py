@@ -212,7 +212,7 @@ class GasPreprocessor:
         raw_series = df[self.gas_name]
         
         # Find the data collection start date for the gas 
-        self.start_date = raw_series.first_valid_index()
+        self.start_date_ = raw_series.first_valid_index()
         print(f'Data collection start date for {self.gas_name}: {self.start_date_}')
         
         # ensure that negative values have been converted to NaN
@@ -221,12 +221,16 @@ class GasPreprocessor:
             print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
             raw_series = raw_series.where(raw_series >= 0, np.nan)
             
+        # Trim the series to start from the first valid measurement (data collection start date)
+        trimmed_series = raw_series.loc[self.start_date_:]
+            
         # Debug input data
         print(f'Raw data: {len(raw_series)} points, {raw_series.isna().sum()} NaNs')
+        print(f'Trimmed data: {len(trimmed_series)} points, {trimmed_series.isna().sum()} NaNs')
 
         # Handle missing dates and get a uniform frequency by resampling.
         # This creates a 'preliminary' series for the decomposition step.
-        resampled_series = raw_series.resample(self.resample_freq).mean()
+        resampled_series = trimmed_series.resample(self.resample_freq).mean()
         
         # Debug after resampling
         print(f'After resampling: {len(resampled_series)} points, {resampled_series.isna().sum()} NaNs')
@@ -319,8 +323,11 @@ class GasPreprocessor:
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
+        # trim the new data to start from the same date as in fit()
+        new_series = df[self.gas_name_].loc[self.start_date_:]
+        
         # Resample the new data to the same frequency used in fit()
-        new_resampled = df[self.gas_name].resample(self.resample_freq).mean()
+        new_resampled = new_series.resample(self.resample_freq).mean()
 
         # Align the new data with the stored outlier mask.
         # Create a series for the new data dates, default to NaN for outliers

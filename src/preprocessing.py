@@ -106,6 +106,13 @@ class GasPreprocessor:
             print(f'the {label} time series may be difference-stationary according to ADF and KPSS tests.\n')
 
     def _plot_decomposition(self, stl_result):
+        # check if residuals have enough data
+        residuals_clean = stl_result.resid.dropna()
+        if len(residuals_clean) < 2:
+            print('Warning: Not enough data in residuals for decomposition plots')
+            return
+        
+        # create the decomposition plot
         stl_result.plot()
         plt.suptitle('STL Decomposition', fontsize=16)
         plt.tight_layout()
@@ -114,12 +121,15 @@ class GasPreprocessor:
         # ACF and PACF of residuals
         plt.figure(figsize=(12,4))
         
+        # calculate safe number of lags (must be less than the length of the series)
+        safe_lags = min(self.lags, len(residuals_clean) -1)
+        
         plt.subplot(1,2,1)
-        plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=self.lags)
+        plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
         plt.title('ACF of Residuals')
     
         plt.subplot(1,2,2)
-        plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=self.lags)
+        plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
         plt.title('PACF of Residuals')
     
         plt.tight_layout()
@@ -194,6 +204,12 @@ class GasPreprocessor:
         plt.show()
 
     def fit(self, df, custom_title=None):
+        # ensure that negative values have been converted to NaN
+        negative_mask = raw_series < 0
+        if negative_mask.any():
+            print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
+            raw_series = raw_series.where(raw_series >= 0, np.nan)
+            
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
         df = df.copy()
         df['date'] = pd.to_datetime(df['date'])

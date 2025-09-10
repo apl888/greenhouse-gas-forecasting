@@ -216,15 +216,21 @@ class GasPreprocessor:
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
             raw_series = raw_series.where(raw_series >= 0, np.nan)
+            
+        # Debug input data
+        print(f'Raw data: {len(raw_series)} points, {raw_series.isna().sum()} NaNs')
 
         # Handle missing dates and get a uniform frequency by resampling.
         # This creates a 'preliminary' series for the decomposition step.
         resampled_series = raw_series.resample(self.resample_freq).mean()
-        # Let's make a working copy we will clean
+        
+        # Debug after resampling
+        print(f'After resampling: {len(resampled_series)} points, {resampled_series.isna().sum()} NaNs')
+        
+        # Make a working copy
         series_to_clean = resampled_series.copy()
         
-        # Use ROBUST STL to decompose the resampled series and find outliers in the residuals.
-        # `robust=True` is key here. It makes the STL fit resilient to outliers.
+        # Robust STL for outlier detection
         stl_robust = STL(series_to_clean.dropna(), # STL can't handle NaNs internally
                         period=self.seasonal_period,
                         robust=True)
@@ -237,24 +243,34 @@ class GasPreprocessor:
         iqr = q3 - q1
         lower_bound = q1 - self.iqr_factor * iqr
         upper_bound = q3 + self.iqr_factor * iqr
-        outlier_mask = (resid < lower_bound) | (resid > upper_bound)
+        is_outlier = (resid < lower_bound) | (resid > upper_bound)
 
         # Get the dates of the outliers and mask them in the original resampled series
         # This ensures that the influence of the outlier on interpolation is removed.
-        outlier_dates = resid[outlier_mask].index
+        outlier_dates = resid[is_outlier].index
         print(f"[INFO] Found {len(outlier_dates)} potential outliers using robust STL residuals.")
         series_to_clean.loc[outlier_dates] = np.nan # Mask outliers in the series
+        
+        # Debug after outlier removal
+        print(f'After outlier removal: {len(series_to_clean)} points, {series_to_clean.isna().sum()} NaNs')
 
         # Store the outlier mask for use in transform()
         # Create a boolean series aligned with resampled_series where True=outlier
         self.outlier_mask_ = pd.Series(False, index=resampled_series.index)
         self.outlier_mask_.loc[outlier_dates] = True
 
-        
         # Smooth and interpolate the cleaned series
         # Smoothing helps with small fluctuations, interpolation handles NaNs (both original and outlier-induced)
         smoothed = self._smooth_series(series_to_clean)
+        
+        # debug after smoothing
+        print(f'After smoothing: {len(smoothed)} points, {smoothed.isna().sum()} NaNs')
+        
         interpolated = self._interpolate_series(smoothed)
+        
+        # debug after interpolation
+        print(f'After interpolation: {len(interpolated)} points, {interpolated.isna().sum()} NaNs')
+        
         self.start_date_ = interpolated.first_valid_index()
 
         if self.do_eda:

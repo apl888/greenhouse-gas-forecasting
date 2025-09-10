@@ -53,6 +53,14 @@ class GasPreprocessor:
         self.start_date_ = None
         self.trained_ = False
 
+    def _mask_outliers(self, series):
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - self.iqr_factor * iqr
+        upper = q3 + self.iqr_factor * iqr
+        return series.where((series >= lower) & (series <= upper), np.nan)
+
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()
 
@@ -199,69 +207,35 @@ class GasPreprocessor:
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
-        raw_series = df[self.gas_name]
+        series = df[self.gas_name]
+        masked = self._mask_outliers(series)
+        self.start_date_ = masked.first_valid_index()
 
-        # Handle missing dates and get a uniform frequency by resampling.
-        # This creates a 'preliminary' series for the decomposition step.
-        resampled_series = raw_series.resample(self.resample_freq).mean()
-        # Let's make a working copy we will clean
-        series_to_clean = resampled_series.copy()
-        
-        # Use ROBUST STL to decompose the resampled series and find outliers in the residuals.
-        # `robust=True` is key here. It makes the STL fit resilient to outliers.
-        stl_robust = STL(series_to_clean.dropna(), # STL can't handle NaNs internally
-                        period=self.seasonal_period,
-                        robust=True)
-        stl_result = stl_robust.fit()
-        
-        # Find outliers based on the residuals of the robust decomposition
-        resid = stl_result.resid
-        q1 = resid.quantile(0.25)
-        q3 = resid.quantile(0.75)
-        iqr = q3 - q1
-        lower_bound = q1 - self.iqr_factor * iqr
-        upper_bound = q3 + self.iqr_factor * iqr
-        outlier_mask = (resid < lower_bound) | (resid > upper_bound)
-
-        # Get the dates of the outliers and mask them in the original resampled series
-        # This ensures that the influence of the outlier on interpolation is removed.
-        outlier_dates = resid[outlier_mask].index
-        print(f"[INFO] Found {len(outlier_dates)} potential outliers using robust STL residuals.")
-        series_to_clean.loc[outlier_dates] = np.nan # Mask outliers in the series
-
-        # Store the outlier mask for use in transform()
-        # Create a boolean series aligned with resampled_series where True=outlier
-        self.outlier_mask_ = pd.Series(False, index=resampled_series.index)
-        self.outlier_mask_.loc[outlier_dates] = True
-
-        
-        # Smooth and interpolate the cleaned series
-        # Smoothing helps with small fluctuations, interpolation handles NaNs (both original and outlier-induced)
-        smoothed = self._smooth_series(series_to_clean)
-        interpolated = self._interpolate_series(smoothed)
-        self.start_date_ = interpolated.first_valid_index()
+        smoothed = self._smooth_series(masked).loc[self.start_date_:]
+        resampled = smoothed.resample(self.resample_freq).mean()
+        interpolated = self._interpolate_series(resampled)
 
         if self.do_eda:
-                # Plot: Raw Resampled vs. Cleaned & Processed
-                if custom_title is None:
-                    custom_title = f'{self.gas_name}: Raw Resampled vs. Cleaned & Processed'
-                self._plot_smoothed_interpolated_data(resampled_series, interpolated, custom_title=custom_title)
+            if custom_title is None:
+                custom_title = f'{self.gas_name} Time Series: Raw Data vs. Smoothed, Resampled, & Interpolated'
+            self._plot_smoothed_interpolated_data(series, interpolated, custom_title=custom_title)
+            print('[INFO] EDA stationarity tests:')
+            self._run_stationarity_tests(series, 'Raw Data')
+            self._run_stationarity_tests(smoothed, 'Smoothed Data')
+            self._run_stationarity_tests(interpolated, 'Resampled & Interpolated Data')
 
-                # Run stationarity tests on the final processed series
-                print('[INFO] EDA stationarity tests on processed data:')
-                self._run_stationarity_tests(interpolated, 'Processed Data')
+        stl = STL(interpolated, period=self.seasonal_period, robust=True)
+        self.stl_result_ = stl.fit()
 
-                # Perform final STL decomposition on the clean, processed data for analysis
-                self.stl_result_ = STL(interpolated, period=self.seasonal_period, robust=True).fit()
-                self._plot_decomposition(self.stl_result_)
-                self.test_heteroscedasticity(self.stl_result_.resid, label='Heteroscedasticity Tests of Residuals')
-
-            else:
-                # If not doing EDA, we still need to fit the STL model for potential later use
-                self.stl_result_ = STL(interpolated, period=self.seasonal_period, robust=True).fit()
-
-            self.trained_ = True
-            return self
+        if self.do_eda:
+            self._plot_decomposition(self.stl_result_)
+            self._run_stationarity_tests(self.stl_result_.trend, 'Trend')
+            self._run_stationarity_tests(self.stl_result_.seasonal, 'Seasonal')
+            self._run_stationarity_tests(self.stl_result_.resid, 'Residuals')
+            self.test_heteroscedasticity(self.stl_result_.resid, label='Heteroscedasticity Tests of Residuals')
+            
+        self.trained_ = True
+        return self
 
     def transform(self, df, custom_title=None):
         '''
@@ -275,27 +249,16 @@ class GasPreprocessor:
         '''
         if not self.trained_:
             raise ValueError('You must call .fit() before .transform().')
-            # Check if fit() stored the outlier mask
-        if not hasattr(self, 'outlier_mask_'):
-            raise ValueError('Model has not been fit with the new outlier detection logic. Call fit() first.')
 
         df = df.copy()
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
-        # Resample the new data to the same frequency used in fit()
-        new_resampled = df[self.gas_name].resample(self.resample_freq).mean()
-
-        # Align the new data with the stored outlier mask.
-        # Create a series for the new data dates, default to NaN for outliers
-        # The .reindex aligns the new data with the index of the mask from fit()
-        new_series_to_clean = new_resampled.reindex(self.outlier_mask_.index)
-        # Apply the mask: where outlier_mask_ is True, keep as NaN. Otherwise, use the new value.
-        new_series_to_clean.loc[self.outlier_mask_] = np.nan
-
-        # Apply the smoothing and interpolation
-        smoothed = self._smooth_series(new_series_to_clean)
-        interpolated = self._interpolate_series(smoothed)
+        series = df[self.gas_name]
+        masked = self._mask_outliers(series)
+        smoothed = self._smooth_series(masked).loc[self.start_date_:]
+        resampled = smoothed.resample(self.resample_freq).mean()
+        interpolated = self._interpolate_series(resampled)
 
         return interpolated
 

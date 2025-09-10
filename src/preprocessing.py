@@ -113,8 +113,25 @@ class GasPreprocessor:
             return
         
         # create the decomposition plot
-        stl_result.plot()
-        plt.suptitle('STL Decomposition', fontsize=16)               
+        fig = stl_result.plot()
+        plt.suptitle('STL Decomposition', fontsize=16)      
+        
+        # Access the axes of the plot
+        axes = fig.axes
+        
+        # Customize the residual plot (4th subplot)
+        if len(axes) >= 4:
+            resid_ax = axes[3]  # Residuals are typically the 4th subplot
+            # Change residual plot to use lines with small markers
+            lines = resid_ax.get_lines()
+            if lines:
+                # Modify the existing line (default is markers only for residuals)
+                line = lines[0]
+                line.set_linestyle('-')  # Add line connecting points
+                line.set_marker('o')     # Ensure markers are circles
+                line.set_markersize(2)   # Reduce marker size
+                line.set_alpha(0.6)      # Optional: adjust transparency
+            
         plt.tight_layout()
         plt.show()
     

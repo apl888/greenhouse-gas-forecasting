@@ -114,7 +114,7 @@ class GasPreprocessor:
         
         # create the decomposition plot
         stl_result.plot()
-        plt.suptitle('STL Decomposition', fontsize=16)
+        plt.suptitle('STL Decomposition', fontsize=16)               
         plt.tight_layout()
         plt.show()
     

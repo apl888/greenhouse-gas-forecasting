@@ -212,8 +212,8 @@ class GasPreprocessor:
         raw_series = df[self.gas_name]
         
         # Find the data collection start date for the gas 
-        self.true_start_date = raw_series.first_valid_index()
-        print(f'Data collection start date for {self.gas_name}: {self.true_start_date_}')
+        self.start_date = raw_series.first_valid_index()
+        print(f'Data collection start date for {self.gas_name}: {self.start_date_}')
         
         # ensure that negative values have been converted to NaN
         negative_mask = raw_series < 0

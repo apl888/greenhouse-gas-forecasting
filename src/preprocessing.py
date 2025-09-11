@@ -141,7 +141,7 @@ class GasPreprocessor:
             
             # set y-axis position, label, and tick font sizes
             ax.yaxis.set_label_position('right')
-            ax.set_ylabel(y_label(), fontsize=label_fontsize)
+            ax.set_ylabel(y_label, fontsize=label_fontsize)
             ax.tick_params(axis='y', labelsize=tick_fontsize)
             
             # set x-axis tick fontsize

@@ -122,8 +122,8 @@ class GasPreprocessor:
         axes = fig.axes
         
         # Define font sizes
-        label_fontsize = 14
-        tick_fontsize = 14
+        label_fontsize = 12
+        tick_fontsize = 12
         
         # customize subplots
         for i, ax in enumerate(axes):

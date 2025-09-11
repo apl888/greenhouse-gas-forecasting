@@ -146,6 +146,10 @@ class GasPreprocessor:
         plt.subplot(1,2,1)
         plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
         plt.title('ACF of Residuals')
+        plt.ylabel('Autocorrelation Coefficient', fontsize=18)
+        plt.xlabel('Lag', fontsize=18)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
     
         plt.subplot(1,2,2)
         plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)

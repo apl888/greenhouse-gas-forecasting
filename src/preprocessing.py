@@ -127,6 +127,9 @@ class GasPreprocessor:
         
         # customize subplots
         for i, ax in enumerate(axes):
+            # move y-axis label to the right for better alignments of labels
+            ax_yaxis.set_label_position('right')
+            
             # set y-axis label and tick font sizes
             ax.set_ylabel(ax.get_ylabel(), fontsize=label_fontsize)
             ax.tick_params(axis='y', labelsize=tick_fontsize)

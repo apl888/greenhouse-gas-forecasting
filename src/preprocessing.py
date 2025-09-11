@@ -65,7 +65,7 @@ class GasPreprocessor:
     
         plt.figure(figsize=figsize)
         plt.plot(raw_series, label='Raw Data', marker='.', markersize=3, color='#0072B2', linewidth=0.75, alpha=0.5)
-        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color='#E69F00', alpha=0.7)
+        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color="#F0950D", alpha=0.7)
         
         title = custom_title if custom_title else f'{self.gas_name} Time Series'
         plt.title(title, fontsize=title_fontsize)

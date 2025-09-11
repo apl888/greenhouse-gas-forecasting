@@ -127,10 +127,20 @@ class GasPreprocessor:
         
         # customize subplots
         for i, ax in enumerate(axes):
-            # move y-axis label to the right for better alignments of labels
-            ax.yaxis.set_label_position('right')
+            # set the y-axis label for each subplot
+            if i == 0:
+                y_label = 'Observed'
+            elif i == 1:
+                y_label = 'Trend'
+            elif i == 2:
+                y_label = 'Seasonal'
+            elif i == 3:
+                y_label = 'Residual'
+            else:
+                y_label = ax.get_ylabel() 
             
-            # set y-axis label and tick font sizes
+            # set y-axis position, label, and tick font sizes
+            ax.yaxis.set_label_position('right')
             ax.set_ylabel(ax.get_ylabel(), fontsize=label_fontsize)
             ax.tick_params(axis='y', labelsize=tick_fontsize)
             

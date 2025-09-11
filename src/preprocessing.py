@@ -121,6 +121,23 @@ class GasPreprocessor:
         # Access the axes of the plot
         axes = fig.axes
         
+        # Define font sizes
+        label_fontsize = 16
+        tick_fontsize = 14
+        
+        # customize subplots
+        for i, ax in enumerate(axes):
+            # set y-axis label and tick font sizes
+            ax.set_ylabel(ax.get_ylabel(), fontsize=label_fontsize)
+            ax.tick_params(axis='y', labelsize=tick_fontsize)
+            
+            # set x-axis tick fontsize
+            ax.tick_params(axis='x', labelsize=tick_fontsize)
+            
+            # add x-axis label to the bottom subplot only
+            if i == len(axes) - 1: # last subplot
+                ax.set_xlabel('Year', fontsize=label_fontsize)
+        
         # Customize the residual plot (4th subplot)
         if len(axes) >= 4:
             resid_ax = axes[3]  # Residuals are typically the 4th subplot

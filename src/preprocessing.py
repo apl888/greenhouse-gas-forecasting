@@ -74,7 +74,7 @@ class GasPreprocessor:
         plt.xlabel('Time', fontsize=18)
         plt.yticks(fontsize=14)
         plt.xticks(fontsize=14)
-        plt.legend()
+        plt.legend(fontsize=14)
         plt.tight_layout()
         plt.show()
 

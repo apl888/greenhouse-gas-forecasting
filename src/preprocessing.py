@@ -26,17 +26,22 @@ class GasPreprocessor:
         resample_freq (str): Frequency string for resampling (e.g., 'W' for weekly).
         lags (int): Number of lags to show in ACF and PACF plots.
         do_eda (bool): If True, performs exploratory data analysis with plots and statistical tests.
+        transformation (str, optional): Type of transformation to apply. Options: None, 'log', 'boxcox'.
     
     Attributes:
         trained_ (bool): Indicates whether the model has been fitted.
         stl_result_ (STL): STL decomposition result after fitting.
         start_date_ (pd.Timestamp): First valid timestamp after outlier removal.
-    
+        fitted_lambda_ (float, optional): Lambda parameter fitted for Box-Cox transformation.
+        outlier_mask_ (pd.Series): Boolean series indicating outliers.
+            
     Methods:
         fit(df): Fits the preprocessor on the input DataFrame. Performs optional EDA and STL decomposition.
         transform(df): Transforms a new DataFrame using the same preprocessing steps as in `fit`.
         fit_transform(df): Combines `fit` and `transform` for convenience.
-        plot_smoothed_interpolated_data(raw_series, processed_series): Plots original and processed data for comparison.
+        inverse_transform(series): Inverts the transformation to return to original scale.
+        difference(series, order): Applies differencing to a time series.
+        test_heteroscedasticity(residuals): Tests for heteroscedasticity in residuals. data for comparison.
     '''
     
 # Section 1: Public interface methods
@@ -51,11 +56,12 @@ class GasPreprocessor:
         self.resample_freq = resample_freq
         self.lags = lags
         self.do_eda = do_eda
+        self.transformation = transformation
         self.stl_result_ = None
         self.start_date_ = None
-        self.trained_ = False
-        self.transformation = transformation
-        self.fitted_lambda = None
+        self.trained_ = False       
+        self.fitted_lambda_ = None
+        self.outlier_mask_ = None
 
     def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
@@ -84,12 +90,12 @@ class GasPreprocessor:
         
         # Apply transformation (on the trimmed series with only positive values)
         if self.transformation:
-            print(f"[INFO] Applying {self.transformation}' transformation.")
+            print(f'[INFO] Applying {self.transformation} transformation.')
             transformed_series = self._apply_transform(trimmed_series)
             
             working_series = transformed_series.copy()
         else:
-            working_series = trimmed_series.copy
+            working_series = trimmed_series.copy()
 
         # Handle missing dates and get a uniform frequency by resampling.
         # This creates a 'preliminary' series for the decomposition step.
@@ -117,7 +123,6 @@ class GasPreprocessor:
         is_outlier = (resid < lower_bound) | (resid > upper_bound)
 
         # Get the dates of the outliers and mask them in the original resampled series
-        # This ensures that the influence of the outlier on interpolation is removed.
         outlier_dates = resid[is_outlier].index
         print(f"[INFO] Found {len(outlier_dates)} potential outliers using robust STL residuals.")
         series_to_clean.loc[outlier_dates] = np.nan # Mask outliers in the series
@@ -177,7 +182,7 @@ class GasPreprocessor:
         pd.Series: Transformed gas time series (smoothed, resampled, and interpolated).
         '''
         if not self.trained_:
-            raise NotFittedError('You must call .fit() before .transform().')
+            raise ValueError('You must call .fit() before .transform().')
             # Check if fit() stored the outlier mask
         if not hasattr(self, 'outlier_mask_'):
             raise ValueError('Model has not been fit with the new outlier detection logic. Call fit() first.')
@@ -200,7 +205,7 @@ class GasPreprocessor:
             transformed_new_series = self._apply_transform(new_series)
             working_series = transformed_new_series 
         else:
-            working_series = new_series 
+            working_series = new_series.copy()
                     
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
@@ -233,11 +238,11 @@ class GasPreprocessor:
     
     def inverse_transform(self, series):
         '''
-        Inverts the transformation applied during fit/transofrm.
+        Inverts the transformation applied during fit/transform.
         Use this on forecasts or predictions to bring them back to original scale.
         
         Parameters:
-        series (pd.Series): Series in transformed space to convert back to oringinal units.
+        series (pd.Series): Series in transformed space to convert back to original units.
         
         Returns:
         pd.Series: Series in original units.
@@ -249,7 +254,7 @@ class GasPreprocessor:
         
 # Section 2: Core preprocessing methods 
         
-    def _apply_transformation(self, series, inverse=False):
+    def _apply_transform(self, series, inverse=False):
         '''
         Applies or inverts the specified transformation to a series
         '''
@@ -282,9 +287,12 @@ class GasPreprocessor:
             # apply inverse transformation
             if self.transformation == 'log':
                 return np.exp(series)
-            else: 
-                inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
-                return inv_data
+            elif self.transformation == 'boxcox':
+                if self.fitted_lambda_ == 0:
+                    return np.exp(series)
+                else: 
+                    inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
+                    return inv_data
 
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()

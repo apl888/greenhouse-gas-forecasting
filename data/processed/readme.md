@@ -47,9 +47,13 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, p
 
 ---
 
-### 3. **Train/Test Splits**  
-#### `ch4_train_preprocessed.csv` & `ch4_test_preprocessed.csv`  
-- **Source:** Temporal split (80%/20%) of `all_ghg_aligned_nan.csv` CH₄ data  
+### 3. **Train/Valid/Test Splits**  
+#### `ch4_train_preprocessed.csv`, `ch4_valid_preprocessed.csv`, & `ch4_test_preprocessed.csv`  
+- **Source:** A rigorous temporal train-validation-test split of the `all_ghg_aligned_nan.csv` CH₄ data designed to prevent data leakage during model evaluation.
+- **Split Strategy:**
+  - Test Set: The most recent 52 weeks (1 year) of data. Used for the final, unbiased evaluation of the chosen model.
+  - Validation Set: The 52 weeks of data immediately preceding the test set. Used for hyperparameter tuning and model selection during development.
+  - Training Set: All remaining data prior to the validation set. Used for model fitting.
 - **Preprocessing:**  
   - `GasPreprocessor` pipeline (outlier removal, imputation)  
   - Weekly resampling (`W-SUN`)  

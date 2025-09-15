@@ -38,9 +38,6 @@ class GasPreprocessor:
         fit_transform(df): Combines `fit` and `transform` for convenience.
         plot_smoothed_interpolated_data(raw_series, processed_series): Plots original and processed data for comparison.
     '''
-    
-# Section 1: Public interface methods
-    
     def __init__(self, gas_name, seasonal_period=52, window=7, iqr_factor=1.5, interpolate_method='linear', 
                  resample_freq='W', lags=52, do_eda=True, transformation=None):
         self.gas_name = gas_name
@@ -56,6 +53,250 @@ class GasPreprocessor:
         self.trained_ = False
         self.transformation = transformation
         self.fitted_lambda = None
+        
+    def _apply_transformation(self, series, inverse=False):
+        '''
+        Applies or inverts the specified transformation to a series
+        '''
+        if self.transformation is None:
+            return series
+        
+        if not inverse:
+            # apply forward transformation
+            if self.transformation == 'log':
+                return np.log(series)
+            elif self.transformation == 'boxcox':
+                # check if in fit (need to compute lambda) or transform (use stored lambda)
+                if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
+                    # this should happen only during .fit()
+                    from scipy import stats
+                    # boxcox requires positive data, which is ensured by prior step
+                    transformed_data, fitted_lambda = stats.boxcox(series.dropna())
+                    self.fitted_lambda_ = fitted_lambda
+                    # create a new series with transformed values, prserving the index
+                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
+                    # reindex to original index, NaNs will remain NaN
+                    return transformed_series.reindex(series.index)
+                else:
+                    # this is .transform(), use the stored lambda
+                    from scipy import stats
+                    transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
+                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
+                    return transformed_series.reindex(series.index)
+        else:
+            # apply inverse transformation
+            if self.transformation == 'log':
+                return np.exp(series)
+            else: 
+                inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
+                return inv_data
+
+    def _smooth_series(self, series):
+        return series.rolling(window=self.window, center=True, min_periods=1).median()
+
+    def _interpolate_series(self, series):
+        return series.interpolate(method=self.interpolate_method)
+
+    def _plot_smoothed_interpolated_data(self, raw_series, processed_series, figsize=(10,4), 
+                                         title_fontsize=16, custom_title=None):
+        plt.close('all') # close any open figures to avoid ghost plots
+    
+        plt.figure(figsize=figsize)
+        plt.plot(raw_series, label='Raw Data', marker='.', markersize=3, color='#0072B2', linewidth=0.75, alpha=0.7)
+        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color="#F0950D", alpha=0.9)
+        
+        title = custom_title if custom_title else f'{self.gas_name} Time Series'
+        plt.title(title, fontsize=title_fontsize)
+        
+        plt.ylabel('Concentration', fontsize=18)
+        plt.xlabel('Time', fontsize=18)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
+        plt.legend(fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
+    def _run_stationarity_tests(self, series, label):
+        try:
+            adf_result = adfuller(series.dropna())
+        except ValueError as e:
+            print(f'Error in ADF test: {e}')
+        
+        try:
+            kpss_result = kpss(series.dropna(), regression='c')
+        except ValueError as e:
+            print(f'Error in KPSS test: {e}')
+
+        print(f'ADF and KPSS tests for {label}:')
+        print(f'ADF statistic {adf_result[0]:.4f}')
+        print(f'ADF p-value {adf_result[1]:.4f}')
+        print(f'ADF critical values: {adf_result[4]}\n')
+    
+        print(f'KPSS statistic {kpss_result[0]:.4f}')
+        print(f'KPSS p-value {kpss_result[1]:.4f}')
+        print(f'KPSS critical values: {kpss_result[3]}\n')
+    
+        if adf_result[1] < 0.05 and kpss_result[1] > 0.05:
+            print(f'the {label} time series is likely stationary according to ADF and KPSS tests.\n')
+        elif adf_result[1] > 0.05 and kpss_result[1] < 0.05:
+            print(f'the {label} time series is non-stationary according to ADF and KPSS tests.\n')
+        elif adf_result[1] > 0.05 and kpss_result[1] > 0.05:
+            print(f'the {label} time series may be trend-stationary according to ADF and KPSS tests.\n')
+        else: 
+            print(f'the {label} time series may be difference-stationary according to ADF and KPSS tests.\n')
+
+    def _plot_decomposition(self, stl_result):
+        # check if residuals have enough data
+        residuals_clean = stl_result.resid.dropna()
+        if len(residuals_clean) < 2:
+            print('Warning: Not enough data in residuals for decomposition plots')
+            return
+        
+        # create the decomposition plot
+        fig = stl_result.plot()
+        plt.suptitle('STL Decomposition', fontsize=16)      
+        
+        # Access the axes of the plot
+        axes = fig.axes
+        
+        # Define font sizes
+        label_fontsize = 12
+        tick_fontsize = 12
+        
+        # customize subplots
+        for i, ax in enumerate(axes):
+            # set the y-axis label for each subplot
+            if i == 0:
+                y_label = 'Observed'
+            elif i == 1:
+                y_label = 'Trend'
+            elif i == 2:
+                y_label = 'Seasonal'
+            elif i == 3:
+                y_label = 'Residual'
+            else:
+                y_label = ax.get_ylabel() 
+            
+            # set y-axis position, label, and tick font sizes
+            ax.yaxis.set_label_position('right')
+            ax.set_ylabel(y_label, fontsize=label_fontsize)
+            ax.tick_params(axis='y', labelsize=tick_fontsize)
+            
+            # set x-axis tick fontsize
+            ax.tick_params(axis='x', labelsize=tick_fontsize)
+            
+            # add x-axis label to the bottom subplot only
+            if i == len(axes) - 1: # last subplot
+                ax.set_xlabel('Year', fontsize=label_fontsize)
+        
+        # Customize the residual plot (4th subplot)
+        if len(axes) >= 4:
+            resid_ax = axes[3]  # Residuals are typically the 4th subplot
+            # Change residual plot to use lines with small markers
+            lines = resid_ax.get_lines()
+            if lines:
+                # Modify the existing line (default is markers only for residuals)
+                line = lines[0]
+                line.set_linestyle('-')  # Add line connecting points
+                line.set_marker('o')     # Ensure markers are circles
+                line.set_markersize(2)   # Reduce marker size
+                line.set_alpha(0.6)      # Optional: adjust transparency
+            
+        plt.tight_layout()
+        plt.show()
+    
+        # ACF and PACF of residuals
+        plt.figure(figsize=(12,4))
+        
+        # calculate safe number of lags (must be less than the length of the series)
+        safe_lags = min(self.lags, len(residuals_clean) -1)
+        
+        plt.subplot(1,2,1)
+        plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
+        plt.title('ACF of Residuals', fontsize=16)
+        plt.ylabel('Autocorrelation Coef', fontsize=16)
+        plt.xlabel('Lag', fontsize=16)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
+    
+        plt.subplot(1,2,2)
+        plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
+        plt.title('PACF of Residuals', fontsize=16)
+        plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
+        plt.xlabel('Lag', fontsize=16)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
+    
+        plt.tight_layout()
+        plt.show()
+        
+    def test_heteroscedasticity(self, residuals, label='Heteroscedasticity Tests'):
+        '''
+        Test for heteroscedasticity in the residuals using the Breusch-Pagan and White tests.
+
+        Parameters:
+            residuals (pd.Series): residuals from the fitted model
+
+        Returns:
+            Breusch-Pagan p-value: p < 0.05 indicates heteroscedasticity
+            White Test p-value: p < 0.05 indicates heteroscedasticity 
+        '''
+        X = sm.add_constant(np.arange(len(residuals)))
+        bp_test = het_breuschpagan(residuals, X)
+        white_test = het_white(residuals, X)
+        
+        print(f'\n{label}')
+        print(f'Breusch-Pagan p-value: {bp_test[1]:.4f}')
+        if bp_test[1] < 0.05:
+            print('Heteroscedasticity detected (Breusch-Pagan test)')
+        else:
+            print('No heteroscedasticity detected (Breusch-Pagan test)')
+            
+        print(f'\nWhite Test p-value: {white_test[1]:.4f}')
+        if white_test[1] < 0.05:
+            print('Heteroscedasticity detected (White test)')
+        else:
+            print('No heteroscedasticity detected (White test)')
+
+        return {'bp_pvalue': bp_test[1], 'white_pvalue': white_test[1]} 
+
+    def difference(self, series, order=1):
+        '''
+        Apply difference of specified order to a time series.
+
+        Parameters:
+            series (pd.Series): a single gas time series
+            order (int): order of differencing
+
+        Returns:
+            pd.Series: differenced series
+        '''
+        differenced = series.diff(order).dropna()
+        return differenced
+
+    def _run_stationarity_and_ac_analysis(self, series, label='Differenced Series'):
+        '''
+        Run stationarity tests and plot ACF/PACF plots on the provided series.
+
+        Parameters:
+            series (pd.Series): the time series to analyze, which is intended for the differenced series
+            label (str): label for the output and plot titles
+        '''
+        print(f'\n[INFO] Stationarity and Autocorrelation Analysis for {label}')
+        self._run_stationarity_tests(series, label)
+
+        plt.figure(figsize=(12,4))
+
+        plt.subplot(1,2,1)
+        plot_acf(series.dropna(), ax=plt.gca(), lags=self.lags)
+        plt.title(f'ACF of {label}')
+
+        plt.subplot(1,2,2)
+        plot_pacf(series.dropna(), ax=plt.gca(), lags=self.lags)
+        plt.title(f'PACF of {label}')
+
+        plt.tight_layout()
+        plt.show()
 
     def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
@@ -246,252 +487,3 @@ class GasPreprocessor:
             return self._apply_transform(series, inverse=True)
         else:
             return series
-        
-# Section 2: Core preprocessing methods 
-        
-    def _apply_transformation(self, series, inverse=False):
-        '''
-        Applies or inverts the specified transformation to a series
-        '''
-        if self.transformation is None:
-            return series
-        
-        if not inverse:
-            # apply forward transformation
-            if self.transformation == 'log':
-                return np.log(series)
-            elif self.transformation == 'boxcox':
-                # check if in fit (need to compute lambda) or transform (use stored lambda)
-                if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
-                    # this should happen only during .fit()
-                    from scipy import stats
-                    # boxcox requires positive data, which is ensured by prior step
-                    transformed_data, fitted_lambda = stats.boxcox(series.dropna())
-                    self.fitted_lambda_ = fitted_lambda
-                    # create a new series with transformed values, prserving the index
-                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
-                    # reindex to original index, NaNs will remain NaN
-                    return transformed_series.reindex(series.index)
-                else:
-                    # this is .transform(), use the stored lambda
-                    from scipy import stats
-                    transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
-                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
-                    return transformed_series.reindex(series.index)
-        else:
-            # apply inverse transformation
-            if self.transformation == 'log':
-                return np.exp(series)
-            else: 
-                inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
-                return inv_data
-
-    def _smooth_series(self, series):
-        return series.rolling(window=self.window, center=True, min_periods=1).median()
-
-    def _interpolate_series(self, series):
-        return series.interpolate(method=self.interpolate_method)
-    
-    def difference(self, series, order=1):
-        '''
-        Apply difference of specified order to a time series.
-
-        Parameters:
-            series (pd.Series): a single gas time series
-            order (int): order of differencing
-
-        Returns:
-            pd.Series: differenced series
-        '''
-        differenced = series.diff(order).dropna()
-        return differenced
-
-# Section 3: EDA/Visualization methods 
-
-    def _plot_smoothed_interpolated_data(self, raw_series, processed_series, figsize=(10,4), 
-                                         title_fontsize=16, custom_title=None):
-        plt.close('all') # close any open figures to avoid ghost plots
-    
-        plt.figure(figsize=figsize)
-        plt.plot(raw_series, label='Raw Data', marker='.', markersize=3, color='#0072B2', linewidth=0.75, alpha=0.7)
-        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color="#F0950D", alpha=0.9)
-        
-        title = custom_title if custom_title else f'{self.gas_name} Time Series'
-        plt.title(title, fontsize=title_fontsize)
-        
-        plt.ylabel('Concentration', fontsize=18)
-        plt.xlabel('Time', fontsize=18)
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
-        plt.legend(fontsize=14)
-        plt.tight_layout()
-        plt.show()
-
-    def _run_stationarity_tests(self, series, label):
-        try:
-            adf_result = adfuller(series.dropna())
-        except ValueError as e:
-            print(f'Error in ADF test: {e}')
-        
-        try:
-            kpss_result = kpss(series.dropna(), regression='c')
-        except ValueError as e:
-            print(f'Error in KPSS test: {e}')
-
-        print(f'ADF and KPSS tests for {label}:')
-        print(f'ADF statistic {adf_result[0]:.4f}')
-        print(f'ADF p-value {adf_result[1]:.4f}')
-        print(f'ADF critical values: {adf_result[4]}\n')
-    
-        print(f'KPSS statistic {kpss_result[0]:.4f}')
-        print(f'KPSS p-value {kpss_result[1]:.4f}')
-        print(f'KPSS critical values: {kpss_result[3]}\n')
-    
-        if adf_result[1] < 0.05 and kpss_result[1] > 0.05:
-            print(f'the {label} time series is likely stationary according to ADF and KPSS tests.\n')
-        elif adf_result[1] > 0.05 and kpss_result[1] < 0.05:
-            print(f'the {label} time series is non-stationary according to ADF and KPSS tests.\n')
-        elif adf_result[1] > 0.05 and kpss_result[1] > 0.05:
-            print(f'the {label} time series may be trend-stationary according to ADF and KPSS tests.\n')
-        else: 
-            print(f'the {label} time series may be difference-stationary according to ADF and KPSS tests.\n')
-
-    def _plot_decomposition(self, stl_result):
-        # check if residuals have enough data
-        residuals_clean = stl_result.resid.dropna()
-        if len(residuals_clean) < 2:
-            print('Warning: Not enough data in residuals for decomposition plots')
-            return
-        
-        # create the decomposition plot
-        fig = stl_result.plot()
-        plt.suptitle('STL Decomposition', fontsize=16)      
-        
-        # Access the axes of the plot
-        axes = fig.axes
-        
-        # Define font sizes
-        label_fontsize = 12
-        tick_fontsize = 12
-        
-        # customize subplots
-        for i, ax in enumerate(axes):
-            # set the y-axis label for each subplot
-            if i == 0:
-                y_label = 'Observed'
-            elif i == 1:
-                y_label = 'Trend'
-            elif i == 2:
-                y_label = 'Seasonal'
-            elif i == 3:
-                y_label = 'Residual'
-            else:
-                y_label = ax.get_ylabel() 
-            
-            # set y-axis position, label, and tick font sizes
-            ax.yaxis.set_label_position('right')
-            ax.set_ylabel(y_label, fontsize=label_fontsize)
-            ax.tick_params(axis='y', labelsize=tick_fontsize)
-            
-            # set x-axis tick fontsize
-            ax.tick_params(axis='x', labelsize=tick_fontsize)
-            
-            # add x-axis label to the bottom subplot only
-            if i == len(axes) - 1: # last subplot
-                ax.set_xlabel('Year', fontsize=label_fontsize)
-        
-        # Customize the residual plot (4th subplot)
-        if len(axes) >= 4:
-            resid_ax = axes[3]  # Residuals are typically the 4th subplot
-            # Change residual plot to use lines with small markers
-            lines = resid_ax.get_lines()
-            if lines:
-                # Modify the existing line (default is markers only for residuals)
-                line = lines[0]
-                line.set_linestyle('-')  # Add line connecting points
-                line.set_marker('o')     # Ensure markers are circles
-                line.set_markersize(2)   # Reduce marker size
-                line.set_alpha(0.6)      # Optional: adjust transparency
-            
-        plt.tight_layout()
-        plt.show()
-    
-        # ACF and PACF of residuals
-        plt.figure(figsize=(12,4))
-        
-        # calculate safe number of lags (must be less than the length of the series)
-        safe_lags = min(self.lags, len(residuals_clean) -1)
-        
-        plt.subplot(1,2,1)
-        plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
-        plt.title('ACF of Residuals', fontsize=16)
-        plt.ylabel('Autocorrelation Coef', fontsize=16)
-        plt.xlabel('Lag', fontsize=16)
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
-    
-        plt.subplot(1,2,2)
-        plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
-        plt.title('PACF of Residuals', fontsize=16)
-        plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
-        plt.xlabel('Lag', fontsize=16)
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
-    
-        plt.tight_layout()
-        plt.show()
-        
-    def test_heteroscedasticity(self, residuals, label='Heteroscedasticity Tests'):
-        '''
-        Test for heteroscedasticity in the residuals using the Breusch-Pagan and White tests.
-
-        Parameters:
-            residuals (pd.Series): residuals from the fitted model
-
-        Returns:
-            Breusch-Pagan p-value: p < 0.05 indicates heteroscedasticity
-            White Test p-value: p < 0.05 indicates heteroscedasticity 
-        '''
-        X = sm.add_constant(np.arange(len(residuals)))
-        bp_test = het_breuschpagan(residuals, X)
-        white_test = het_white(residuals, X)
-        
-        print(f'\n{label}')
-        print(f'Breusch-Pagan p-value: {bp_test[1]:.4f}')
-        if bp_test[1] < 0.05:
-            print('Heteroscedasticity detected (Breusch-Pagan test)')
-        else:
-            print('No heteroscedasticity detected (Breusch-Pagan test)')
-            
-        print(f'\nWhite Test p-value: {white_test[1]:.4f}')
-        if white_test[1] < 0.05:
-            print('Heteroscedasticity detected (White test)')
-        else:
-            print('No heteroscedasticity detected (White test)')
-
-        return {'bp_pvalue': bp_test[1], 'white_pvalue': white_test[1]} 
-
-    def _run_stationarity_and_ac_analysis(self, series, label='Differenced Series'):
-        '''
-        Run stationarity tests and plot ACF/PACF plots on the provided series.
-
-        Parameters:
-            series (pd.Series): the time series to analyze, which is intended for the differenced series
-            label (str): label for the output and plot titles
-        '''
-        print(f'\n[INFO] Stationarity and Autocorrelation Analysis for {label}')
-        self._run_stationarity_tests(series, label)
-
-        plt.figure(figsize=(12,4))
-
-        plt.subplot(1,2,1)
-        plot_acf(series.dropna(), ax=plt.gca(), lags=self.lags)
-        plt.title(f'ACF of {label}')
-
-        plt.subplot(1,2,2)
-        plot_pacf(series.dropna(), ax=plt.gca(), lags=self.lags)
-        plt.title(f'PACF of {label}')
-
-        plt.tight_layout()
-        plt.show()
-

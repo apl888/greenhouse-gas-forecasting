@@ -266,15 +266,18 @@ class GasPreprocessor:
             if self.transformation == 'log':
                 return np.log(series)
             elif self.transformation == 'boxcox':
+                positive_series = series.dropna()
+                print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
                 # check if in fit (need to compute lambda) or transform (use stored lambda)
                 if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
                     # this should happen only during .fit()
                     from scipy import stats
                     # boxcox requires positive data, which is ensured by prior step
-                    transformed_data, fitted_lambda = stats.boxcox(series.dropna())
+                    transformed_data, fitted_lambda = stats.boxcox(positive_series)
+                    print(f'Calculated lambda: {fitted_lambda}')
                     self.fitted_lambda_ = fitted_lambda
                     # create a new series with transformed values, prserving the index
-                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
+                    transformed_series = pd.Series(transformed_data, index=positive_series.index)
                     # reindex to original index, NaNs will remain NaN
                     return transformed_series.reindex(series.index)
                 else:

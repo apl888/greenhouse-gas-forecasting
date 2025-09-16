@@ -47,7 +47,7 @@ class GasPreprocessor:
 # Section 1: Public interface methods
     
     def __init__(self, gas_name, seasonal_period=52, window=7, iqr_factor=1.5, interpolate_method='linear', 
-                 resample_freq='W', lags=52, do_eda=True, transformation=None):
+                 resample_freq='W', lags=52, do_eda=True, transformation=None, bc_lambda=None):
         self.gas_name = gas_name
         self.seasonal_period = seasonal_period
         self.window = window
@@ -57,6 +57,7 @@ class GasPreprocessor:
         self.lags = lags
         self.do_eda = do_eda
         self.transformation = transformation
+        self.bc_lambda = bc_lambda
         self.stl_result_ = None
         self.start_date_ = None
         self.trained_ = False       
@@ -261,13 +262,25 @@ class GasPreprocessor:
         if self.transformation is None:
             return series
         
-        if not inverse:
-            # apply forward transformation
-            if self.transformation == 'log':
-                return np.log(series)
-            elif self.transformation == 'boxcox':
-                positive_series = series.dropna()
-                print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
+    if not inverse:
+        # apply forward transformation
+        if self.transformation == 'log':
+            return np.log(series)
+        elif self.transformation == 'boxcox':
+            positive_series = series.dropna()
+            print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
+            
+            # Check if we're using a fixed lambda
+            if self.bc_lambda is not None:
+                # Use the fixed lambda value
+                self.fitted_lambda_ = self.bc_lambda
+                print(f'Using fixed lambda: {self.fitted_lambda_}')
+                
+                from scipy import stats
+                transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
+                transformed_series = pd.Series(transformed_data, index=positive_series.index)
+                return transformed_series.reindex(series.index)
+            else:
                 # check if in fit (need to compute lambda) or transform (use stored lambda)
                 if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
                     # this should happen only during .fit()
@@ -276,7 +289,7 @@ class GasPreprocessor:
                     transformed_data, fitted_lambda = stats.boxcox(positive_series)
                     print(f'Calculated lambda: {fitted_lambda}')
                     self.fitted_lambda_ = fitted_lambda
-                    # create a new series with transformed values, prserving the index
+                    # create a new series with transformed values, preserving the index
                     transformed_series = pd.Series(transformed_data, index=positive_series.index)
                     # reindex to original index, NaNs will remain NaN
                     return transformed_series.reindex(series.index)
@@ -286,16 +299,16 @@ class GasPreprocessor:
                     transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
                     transformed_series = pd.Series(transformed_data, index=series.dropna().index)
                     return transformed_series.reindex(series.index)
-        else:
-            # apply inverse transformation
-            if self.transformation == 'log':
+    else:
+        # apply inverse transformation
+        if self.transformation == 'log':
+            return np.exp(series)
+        elif self.transformation == 'boxcox':
+            if self.fitted_lambda_ == 0:
                 return np.exp(series)
-            elif self.transformation == 'boxcox':
-                if self.fitted_lambda_ == 0:
-                    return np.exp(series)
-                else: 
-                    inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
-                    return inv_data
+            else: 
+                inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
+                return inv_data
 
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()

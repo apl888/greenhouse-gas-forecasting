@@ -262,53 +262,53 @@ class GasPreprocessor:
         if self.transformation is None:
             return series
         
-    if not inverse:
-        # apply forward transformation
-        if self.transformation == 'log':
-            return np.log(series)
-        elif self.transformation == 'boxcox':
-            positive_series = series.dropna()
-            print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
-            
-            # Check if we're using a fixed lambda
-            if self.bc_lambda is not None:
-                # Use the fixed lambda value
-                self.fitted_lambda_ = self.bc_lambda
-                print(f'Using fixed lambda: {self.fitted_lambda_}')
+        if not inverse:
+            # apply forward transformation
+            if self.transformation == 'log':
+                return np.log(series)
+            elif self.transformation == 'boxcox':
+                positive_series = series.dropna()
+                print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
                 
-                from scipy import stats
-                transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
-                transformed_series = pd.Series(transformed_data, index=positive_series.index)
-                return transformed_series.reindex(series.index)
-            else:
-                # check if in fit (need to compute lambda) or transform (use stored lambda)
-                if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
-                    # this should happen only during .fit()
+                # Check if we're using a fixed lambda
+                if self.bc_lambda is not None:
+                    # Use the fixed lambda value
+                    self.fitted_lambda_ = self.bc_lambda
+                    print(f'Using fixed lambda: {self.fitted_lambda_}')
+                    
                     from scipy import stats
-                    # boxcox requires positive data, which is ensured by prior step
-                    transformed_data, fitted_lambda = stats.boxcox(positive_series)
-                    print(f'Calculated lambda: {fitted_lambda}')
-                    self.fitted_lambda_ = fitted_lambda
-                    # create a new series with transformed values, preserving the index
+                    transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
                     transformed_series = pd.Series(transformed_data, index=positive_series.index)
-                    # reindex to original index, NaNs will remain NaN
                     return transformed_series.reindex(series.index)
                 else:
-                    # this is .transform(), use the stored lambda
-                    from scipy import stats
-                    transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
-                    transformed_series = pd.Series(transformed_data, index=series.dropna().index)
-                    return transformed_series.reindex(series.index)
-    else:
-        # apply inverse transformation
-        if self.transformation == 'log':
-            return np.exp(series)
-        elif self.transformation == 'boxcox':
-            if self.fitted_lambda_ == 0:
+                    # check if in fit (need to compute lambda) or transform (use stored lambda)
+                    if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
+                        # this should happen only during .fit()
+                        from scipy import stats
+                        # boxcox requires positive data, which is ensured by prior step
+                        transformed_data, fitted_lambda = stats.boxcox(positive_series)
+                        print(f'Calculated lambda: {fitted_lambda}')
+                        self.fitted_lambda_ = fitted_lambda
+                        # create a new series with transformed values, preserving the index
+                        transformed_series = pd.Series(transformed_data, index=positive_series.index)
+                        # reindex to original index, NaNs will remain NaN
+                        return transformed_series.reindex(series.index)
+                    else:
+                        # this is .transform(), use the stored lambda
+                        from scipy import stats
+                        transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
+                        transformed_series = pd.Series(transformed_data, index=series.dropna().index)
+                        return transformed_series.reindex(series.index)
+        else:
+            # apply inverse transformation
+            if self.transformation == 'log':
                 return np.exp(series)
-            else: 
-                inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
-                return inv_data
+            elif self.transformation == 'boxcox':
+                if self.fitted_lambda_ == 0:
+                    return np.exp(series)
+                else: 
+                    inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
+                    return inv_data
 
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()

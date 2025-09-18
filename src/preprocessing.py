@@ -184,16 +184,13 @@ class GasPreprocessor:
         '''
         if not self.trained_:
             raise ValueError('You must call .fit() before .transform().')
-            # Check if fit() stored the outlier mask
-        if not hasattr(self, 'outlier_mask_'):
-            raise ValueError('Model has not been fit with the new outlier detection logic. Call fit() first.')
 
         df = df.copy()
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
-        # Trim the new data to start from the same date as in fit()
-        new_series = df[self.gas_name].loc[self.start_date_:]
+        # Use the new data's (e.g. validation and test datasets) own date/time range
+        new_series = df[self.gas_name]
         
         # Handle negative values 
         negative_mask = new_series < 0
@@ -211,15 +208,8 @@ class GasPreprocessor:
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
 
-        # Align the new data with the stored outlier mask.
-        # Create a series for the new data dates, default to NaN for outliers
-        # The .reindex aligns the new data with the index of the mask from fit()
-        new_series_to_clean = new_resampled.reindex(self.outlier_mask_.index)
-        # Apply the mask: where outlier_mask_ is True, keep as NaN. Otherwise, use the new value.
-        new_series_to_clean.loc[self.outlier_mask_] = np.nan
-
         # Apply the smoothing and interpolation
-        smoothed = self._smooth_series(new_series_to_clean)
+        smoothed = self._smooth_series(new_resampled)
         interpolated = self._interpolate_series(smoothed)
 
         return interpolated

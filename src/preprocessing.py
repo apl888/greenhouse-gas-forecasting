@@ -7,6 +7,7 @@ from statsmodels.tsa.stattools import adfuller, kpss
 from statsmodels.stats.diagnostic import het_breuschpagan, het_white
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import matplotlib.pyplot as plt
+from scipy import stats
 
 class GasPreprocessor:
     '''
@@ -269,7 +270,7 @@ class GasPreprocessor:
                     self.fitted_lambda_ = self.bc_lambda
                     print(f'Using fixed lambda: {self.fitted_lambda_}')
                     
-                    from scipy import stats
+                    # Apply Box-Cox transformation with fixed lambda
                     transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
                     transformed_series = pd.Series(transformed_data, index=positive_series.index)
                     return transformed_series.reindex(series.index)
@@ -277,7 +278,6 @@ class GasPreprocessor:
                     # check if in fit (need to compute lambda) or transform (use stored lambda)
                     if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
                         # this should happen only during .fit()
-                        from scipy import stats
                         # boxcox requires positive data, which is ensured by prior step
                         transformed_data, fitted_lambda = stats.boxcox(positive_series)
                         print(f'Calculated lambda: {fitted_lambda}')
@@ -288,9 +288,8 @@ class GasPreprocessor:
                         return transformed_series.reindex(series.index)
                     else:
                         # this is .transform(), use the stored lambda
-                        from scipy import stats
-                        transformed_data = stats.boxcox(series.dropna(), lmbda=self.fitted_lambda_)
-                        transformed_series = pd.Series(transformed_data, index=series.dropna().index)
+                        transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
+                        transformed_series = pd.Series(transformed_data, index=positive_series.index)
                         return transformed_series.reindex(series.index)
         else:
             # apply inverse transformation
@@ -300,8 +299,9 @@ class GasPreprocessor:
                 if self.fitted_lambda_ == 0:
                     return np.exp(series)
                 else: 
-                    inv_data = (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
-                    return inv_data
+                    # Correct inverse Box-Cox transformation
+                    return (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
+
 
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()

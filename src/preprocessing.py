@@ -207,6 +207,9 @@ class GasPreprocessor:
                     
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
+        
+        # Limit the resampled data to only the date range of the input data
+        new_resampled = new_resampled.loc[df.index.min():df.index.max()]
 
         # Apply the smoothing and interpolation
         smoothed = self._smooth_series(new_resampled)

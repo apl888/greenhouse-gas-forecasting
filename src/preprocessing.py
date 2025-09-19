@@ -190,7 +190,7 @@ class GasPreprocessor:
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
 
-        # Use the new data's (e.g. validation and test datasets) own date/time range
+        # Use the new data's own time range (e.g., validation and test datasets)
         new_series = df[self.gas_name]
         
         # Handle negative values 
@@ -261,7 +261,15 @@ class GasPreprocessor:
             if self.transformation == 'log':
                 return np.log(series)
             elif self.transformation == 'boxcox':
-                positive_series = series.dropna()
+                # Handle NaN values first
+                non_na_mask = series.notna()
+                positive_series = series[non_na_mask]
+                
+                # Ensure all values are positive
+                if (positive_series <= 0).any():
+                    print(f'Warning: Non-positive values found in Box-Cox transformation. Clipping to small positive value.')
+                    positive_series = positive_series.clip(lower=1e-10)
+                
                 print(f'Box_Cox input stats: min={positive_series.min()}, max={positive_series.max()}, mean={positive_series.mean()}')
                 
                 # Check if we're using a fixed lambda
@@ -272,8 +280,6 @@ class GasPreprocessor:
                     
                     # Apply Box-Cox transformation with fixed lambda
                     transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
-                    transformed_series = pd.Series(transformed_data, index=positive_series.index)
-                    return transformed_series.reindex(series.index)
                 else:
                     # check if in fit (need to compute lambda) or transform (use stored lambda)
                     if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
@@ -282,15 +288,15 @@ class GasPreprocessor:
                         transformed_data, fitted_lambda = stats.boxcox(positive_series)
                         print(f'Calculated lambda: {fitted_lambda}')
                         self.fitted_lambda_ = fitted_lambda
-                        # create a new series with transformed values, preserving the index
-                        transformed_series = pd.Series(transformed_data, index=positive_series.index)
-                        # reindex to original index, NaNs will remain NaN
-                        return transformed_series.reindex(series.index)
                     else:
                         # this is .transform(), use the stored lambda
                         transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
-                        transformed_series = pd.Series(transformed_data, index=positive_series.index)
-                        return transformed_series.reindex(series.index)
+                
+                # Create a new series with transformed values, preserving the index
+                transformed_series = pd.Series(transformed_data, index=positive_series.index)
+                
+                # Reindex to original index, NaNs will remain NaN
+                return transformed_series.reindex(series.index)
         else:
             # apply inverse transformation
             if self.transformation == 'log':

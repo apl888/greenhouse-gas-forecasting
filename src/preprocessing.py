@@ -313,7 +313,13 @@ class GasPreprocessor:
         return series.rolling(window=self.window, center=True, min_periods=1).median()
 
     def _interpolate_series(self, series):
-        return series.interpolate(method=self.interpolate_method)
+        interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both')
+        
+        # if NaNs remain after interpolation, use forward/backward fill
+        if interpolated.isna.any():
+            interpolated = interpolated.ffill().bfill()
+            
+        return interpolated
     
     def difference(self, series, order=1):
         '''

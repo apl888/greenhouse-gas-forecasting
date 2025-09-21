@@ -278,8 +278,12 @@ class GasPreprocessor:
                     self.fitted_lambda_ = self.bc_lambda
                     print(f'Using fixed lambda: {self.fitted_lambda_}')
                     
-                    # Apply Box-Cox transformation with fixed lambda
-                    transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
+                    # handle lambda = 0 case (log transformation)
+                    if self.fitted_lambda_ == 0:
+                        transformed_data = np.log(positive_series)
+                    else:
+                        # Apply Box-Cox transformation with fixed lambda
+                        transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
                 else:
                     # check if in fit (need to compute lambda) or transform (use stored lambda)
                     if not hasattr(self, 'fitted_lambda_') or self.fitted_lambda_ is None:
@@ -290,7 +294,10 @@ class GasPreprocessor:
                         self.fitted_lambda_ = fitted_lambda
                     else:
                         # this is .transform(), use the stored lambda
-                        transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
+                        if self.fitted_lambda == 0:
+                            tranformed_data = np.log(positive_series)
+                        else:
+                            transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
                 
                 # Create a new series with transformed values, preserving the index
                 transformed_series = pd.Series(transformed_data, index=positive_series.index)
@@ -302,6 +309,8 @@ class GasPreprocessor:
             if self.transformation == 'log':
                 return np.exp(series)
             elif self.transformation == 'boxcox':
+                if self.fitted_lambda == 0:
+                    return np.exp(series) 
                 if self.fitted_lambda_ == 0:
                     return np.exp(series)
                 else: 

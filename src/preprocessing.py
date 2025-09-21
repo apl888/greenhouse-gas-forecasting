@@ -319,16 +319,7 @@ class GasPreprocessor:
             series = series.loc[self.start_date_:]
             
         # interpolate within the valid data range
-        interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both')
-                
-        # if NaNs remain after interpolation, use forward/backward fill
-        if interpolated.isna.any():
-            interpolated = interpolated.ffill().bfill()
-            
-        # final check for remaining NaNs using nearest neighbor interpolation
-        if interpolated.isna().any():
-            interpolated = series.interpolate(method='nearest')
-            interpolated = interpolated.ffill().bfill()            
+        interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both')       
             
         return interpolated
     

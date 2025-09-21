@@ -313,11 +313,22 @@ class GasPreprocessor:
         return series.rolling(window=self.window, center=True, min_periods=1).median()
 
     def _interpolate_series(self, series):
+        # Ensure we're not trying to interpolate before the first valid date
+        if series.index.min() < self.start_date_:
+            print(f"Warning: Series contains dates before {self.start_date_}. Trimming to valid range.")
+            series = series.loc[self.start_date_:]
+            
+        # interpolate within the valid data range
         interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both')
-        
+                
         # if NaNs remain after interpolation, use forward/backward fill
         if interpolated.isna.any():
             interpolated = interpolated.ffill().bfill()
+            
+        # final check for remaining NaNs using nearest neighbor interpolation
+        if interpolated.isna().any():
+            interpolated = series.interpolate(method='nearest')
+            interpolated = interpolated.ffill().bfill()            
             
         return interpolated
     

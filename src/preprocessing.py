@@ -297,7 +297,7 @@ class GasPreprocessor:
                     else:
                         # this is .transform(), use the stored lambda
                         if self.fitted_lambda_ == 0:
-                            tranformed_data = np.log(positive_series)
+                            transformed_data = np.log(positive_series)
                         else:
                             transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
                 

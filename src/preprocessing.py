@@ -259,7 +259,9 @@ class GasPreprocessor:
         if not inverse:
             # apply forward transformation
             if self.transformation == 'log':
-                return np.log(series)
+                # ensure positive values for log transform
+                positive_series = series.where(series > 0, np.nan)
+                return np.log(positive_series)
             elif self.transformation == 'boxcox':
                 # Handle NaN values first
                 non_na_mask = series.notna()
@@ -294,7 +296,7 @@ class GasPreprocessor:
                         self.fitted_lambda_ = fitted_lambda
                     else:
                         # this is .transform(), use the stored lambda
-                        if self.fitted_lambda == 0:
+                        if self.fitted_lambda_ == 0:
                             tranformed_data = np.log(positive_series)
                         else:
                             transformed_data = stats.boxcox(positive_series, lmbda=self.fitted_lambda_)
@@ -309,7 +311,7 @@ class GasPreprocessor:
             if self.transformation == 'log':
                 return np.exp(series)
             elif self.transformation == 'boxcox':
-                if self.fitted_lambda == 0:
+                if self.fitted_lambda_ == 0:
                     return np.exp(series) 
                 if self.fitted_lambda_ == 0:
                     return np.exp(series)

@@ -536,4 +536,38 @@ class GasPreprocessor:
 
         plt.tight_layout()
         plt.show()
-
+        
+    def plot_acf_pacf(self, series, title_suffix=''):
+        '''
+        Plot ACF and PACF plots for any time series
+        '''
+        # make sure there is enough data
+        series_clean = series.dropna()
+        if len(series_clean) < 2:
+            print('Warning: Not enough data for ACF and PACF plots')
+            return
+        
+        # calculate safe number of lags
+        safe_lags = min(self.lags, len(series_clean) - 1)
+        
+        # plot
+        plt.figure(figsize=(12,4))
+        
+        plt.subplot(1,2,1)
+        plt.acf(series_clean, ax=plt.gca(), lags=safe_lags)
+        plt.title(f'ACF Plot of {title_suffix}', fontsize=16)
+        plt.ylabel('Autocorrelation Coef', fontsize=16)
+        plt.xlabel('Lag', fontsize=16)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
+        
+        plt.subplot(1,2,2)
+        plt.pacf(series_clean, ax=plt.gca(), lags=safe_lags)
+        plt.title(f'PACF Plot of {title_suffix}', fontsize=16)
+        plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
+        plt.xlabel('Lag', fontsize=16)
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
+        
+        plt.tight_layout()
+        plt.show()

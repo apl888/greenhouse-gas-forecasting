@@ -556,7 +556,7 @@ class GasPreprocessor:
         plt.subplot(1,2,1)
         plot_acf(series_clean, ax=plt.gca(), lags=safe_lags)
         plt.title(f'ACF Plot of {title_suffix}', fontsize=16)
-        plt.ylabel('Autocorrelation Coef', fontsize=16)
+        plt.ylabel('Autocorrelation Coef', fontsize=16, y=1.10)
         plt.xlabel('Lag', fontsize=16)
         plt.yticks(fontsize=14)
         plt.xticks(fontsize=14)

@@ -71,9 +71,9 @@ def evaluate_sarima_model(series, order, seasonal_order):
     critical_lags = [1, seasonal_period]
     for lag in critical_lags:
         if lag in lb_test.index:
-            lb_pval = lb_test.loc[lag, 'lb_pvalue']
+            pval = lb_test.loc[lag, 'lb_pvalue']
             lb_sig = '\u2713' if pval > 0.05 else '\u2717'
-            print(f'\nLjung-Box (lag {lag}): p-value = {lb_pval:.4f} {lb_sig}')
+            print(f'\nLjung-Box (lag {lag}): p-value = {pval:.4f} {lb_sig}')
             
     min_pval = lb_test['lb_pvalue'].min()
     overall_sig = '\u2713' if min_pval > 0.05 else '\u2717'

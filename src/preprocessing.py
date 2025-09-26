@@ -87,7 +87,7 @@ class GasPreprocessor:
         print(f'Data range after trimming: {self.data_start_date_} to {self.data_end_date_}')
         
         # Ensure that negative values have been converted to NaN
-        negative_mask = raw_series < 0
+        negative_mask = trimmed_series < 0
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
             raw_series = raw_series.where(raw_series >= 0, np.nan)
@@ -200,7 +200,7 @@ class GasPreprocessor:
         trimmed_series = self._trim_trailing_nans(trimmed_series)
         
         # Handle negative values 
-        negative_mask = new_series < 0
+        negative_mask = trimmed_series < 0
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in new {self.gas_name} data.  Converting to NaN.')
             new_series = new_series.where(new_series >= 0, np.nan)
@@ -270,7 +270,7 @@ class GasPreprocessor:
         Trim leading NaN values from a series
         '''
         first_valid_idx = series.first_valid_index()
-        if first valid_idx is not None and first_valid_idx > series.index[0]:
+        if first_valid_idx is not None and first_valid_idx > series.index[0]:
             print(f'Trimming {len(series.loc[:first_valid_idx]) - 1} leading NaN values')
             return series.loc[first_valid_idx:]
         return series
@@ -339,8 +339,6 @@ class GasPreprocessor:
             elif self.transformation == 'boxcox':
                 if self.fitted_lambda_ == 0:
                     return np.exp(series) 
-                if self.fitted_lambda_ == 0:
-                    return np.exp(series)
                 else: 
                     # Correct inverse Box-Cox transformation
                     return (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)

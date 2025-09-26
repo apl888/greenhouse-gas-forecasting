@@ -73,25 +73,23 @@ class GasPreprocessor:
 
         raw_series = df[self.gas_name]
         
-        # Trim both leading and trailing NaNs
-        trimmed_series = self._trim_leading_nans(raw_series)
-        trimmed_series = self._trim_trailing_nans(trimmed_series)
-        
-        # Store the actual data bounaries for reference
-        self.data_start_date_ = trimmed_series.first_valid_index()
-        self.data_end_date_ = trimmed_series.last_valid_index()      
-        
-        # Debug input data
-        print(f'Raw data: {len(raw_series)} points, {raw_series.isna().sum()} NaNs')
-        print(f'Trimmed data: {len(trimmed_series)} points, {trimmed_series.isna().sum()} NaNs')
-        print(f'Data range after trimming: {self.data_start_date_} to {self.data_end_date_}')
+        # Find the data collection start date for the gas 
+        self.start_date_ = raw_series.first_valid_index()
+        print(f'Data collection start date for {self.gas_name}: {self.start_date_}')
         
         # Ensure that negative values have been converted to NaN
         negative_mask = raw_series < 0
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
             raw_series = raw_series.where(raw_series >= 0, np.nan)
-                    
+            
+        # Trim the series to start from the first valid measurement (data collection start date)
+        trimmed_series = raw_series.loc[self.start_date_:]
+            
+        # Debug input data
+        print(f'Raw data: {len(raw_series)} points, {raw_series.isna().sum()} NaNs')
+        print(f'Trimmed data: {len(trimmed_series)} points, {trimmed_series.isna().sum()} NaNs')
+        
         # Apply transformation (on the trimmed series with only positive values)
         if self.transformation:
             print(f'[INFO] Applying {self.transformation} transformation.')
@@ -195,10 +193,6 @@ class GasPreprocessor:
         # Use the new data's own time range (e.g., validation and test datasets)
         new_series = df[self.gas_name]
         
-        # Trim both leading and trailing NaNs
-        trimmed_series = self._trim_leading_nans(new_series)
-        trimmed_series = self._trim_trailing_nans(trimmed_series)
-        
         # Handle negative values 
         negative_mask = new_series < 0
         if negative_mask.any():
@@ -254,27 +248,7 @@ class GasPreprocessor:
             return series
         
 # Section 2: Core preprocessing methods 
-
-    def _trim_trailing_nans(self, series):
-        '''
-        Trim trailing NaN values from a series
-        '''
-        last_valid_idx = series.last_valid_index()
-        if last_valid_idx is not None and last_valid_idx < series.index[-1]:
-            print(f'Trimming {len(series.loc[last_valid_idx:]) - 1} trailing NaN values')
-            return series.loc[:last_valid_idx]
-        return series
-    
-    def _trim_leading_nans(self, series):
-        '''
-        Trim leading NaN values from a series
-        '''
-        first_valid_idx = series.first_valid_index()
-        if first valid_idx is not None and first_valid_idx > series.index[0]:
-            print(f'Trimming {len(series.loc[:first_valid_idx]) - 1} leading NaN values')
-            return series.loc[first_valid_idx:]
-        return series
-                    
+        
     def _apply_transform(self, series, inverse=False):
         '''
         Applies or inverts the specified transformation to a series

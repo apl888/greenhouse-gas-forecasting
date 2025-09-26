@@ -79,7 +79,10 @@ class GasPreprocessor:
         
         # Store the actual data bounaries for reference
         self.data_start_date_ = trimmed_series.first_valid_index()
-        self.data_end_date_ = trimmed_series.last_valid_index()      
+        self.data_end_date_ = trimmed_series.last_valid_index()    
+        
+        # Set the start date
+        self.start_date_ = self.data_start_date_  
         
         # Debug input data
         print(f'Raw data: {len(raw_series)} points, {raw_series.isna().sum()} NaNs')
@@ -90,7 +93,7 @@ class GasPreprocessor:
         negative_mask = trimmed_series < 0
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in {self.gas_name} series. Converting to NaN.')
-            raw_series = raw_series.where(raw_series >= 0, np.nan)
+            trimmed_series = trimmed_series.where(trimmed_series >= 0, np.nan)
                     
         # Apply transformation (on the trimmed series with only positive values)
         if self.transformation:
@@ -150,8 +153,6 @@ class GasPreprocessor:
         
         # debug after interpolation
         print(f'After interpolation: {len(interpolated)} points, {interpolated.isna().sum()} NaNs')
-        
-        self.start_date_ = interpolated.first_valid_index()
 
         if self.do_eda:
                 # Plot: Raw Resampled vs. Cleaned & Processed
@@ -203,14 +204,14 @@ class GasPreprocessor:
         negative_mask = trimmed_series < 0
         if negative_mask.any():
             print(f'Warning: {negative_mask.sum()} negative values found in new {self.gas_name} data.  Converting to NaN.')
-            new_series = new_series.where(new_series >= 0, np.nan)
+            trimmed_series = trimmed_series.where(trimmed_series >= 0, np.nan)
             
         # Apply transformation (using parameters learned during fit)
         if self.transformation:
-            transformed_new_series = self._apply_transform(new_series)
+            transformed_new_series = self._apply_transform(trimmed_series)
             working_series = transformed_new_series 
         else:
-            working_series = new_series.copy()
+            working_series = trimmed_series.copy()
                     
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
@@ -348,6 +349,9 @@ class GasPreprocessor:
         return series.rolling(window=self.window, center=True, min_periods=1).median()
 
     def _interpolate_series(self, series):
+        # Ensure start_date_ is set
+        if self.start_date_ is None:
+            raise ValueError('start_date_ must be set before calling _interpolate_series')
         # Ensure we're not trying to interpolate before the first valid date
         if series.index.min() < self.start_date_:
             print(f"Warning: Series contains dates before {self.start_date_}. Trimming to valid range.")

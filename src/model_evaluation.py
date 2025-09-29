@@ -78,7 +78,7 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
 
     # Optional: heteroscedasticity tests
     if run_hetero:
-        exog = np.column_stack([np.ones((len(residuals), np.arange(residuals))])  
+        exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])  
         bp_test = het_breuschpagan(residuals, exog)
         white_test = het_white(residuals, exog)
 

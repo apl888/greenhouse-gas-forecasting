@@ -64,7 +64,7 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         plt.show()
 
     # Ljung-Box test
-    lb_test = acorr_ljungbox(residuals, lags=[10,20], return_df=True)
+    lb_test = acorr_ljungbox(residuals, lags=[1,4,52], return_df=True)
 
     results_dict = {
         "order": order,

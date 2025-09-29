@@ -93,5 +93,5 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
             "White_F_pval": round(white_test[3], 4),            
         })
 
-    model_eval_df = pd.DataFrame([results_dict])
+    model_eval_df = pd.DataFrame([results_dict]).t
     return model_eval_df

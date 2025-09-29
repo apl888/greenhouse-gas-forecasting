@@ -83,14 +83,8 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         white_test = het_white(residuals, exog)
 
         results_dict.update({
-            "BP_LM": round(bp_test[0], 3),
             "BP_pval": round(bp_test[1], 4),
-            "BP_F": round(bp_test[2], 3),
-            "BP_F_pval": round(bp_test[3], 4),
-            "White_LM": round(white_test[0], 3),
-            "White_pval": round(white_test[1], 4),
-            "White_F": round(white_test[2], 3),
-            "White_F_pval": round(white_test[3], 4),            
+            "White_pval": round(white_test[1], 4),        
         })
 
     results_dict_df = pd.DataFrame([results_dict])

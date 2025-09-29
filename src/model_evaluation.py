@@ -57,7 +57,7 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         axes[1,0].set_title("QQ Plot")
 
         # ACF plot
-        plot_acf(residuals, lags=40, ax=axes[1,1])
+        plot_acf(residuals, lags=52, ax=axes[1,1])
         axes[1,1].set_title("ACF of Residuals")
 
         plt.tight_layout()
@@ -69,25 +69,28 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
     results_dict = {
         "order": order,
         "seasonal_order": seasonal_order,
-        "AIC": results.aic,
-        "BIC": results.bic,
-        "LjungBox_pvalues": lb_test["lb_pvalue"].values
+        "AIC": round(results.aic, 3),
+        "BIC": round(results.bic, 3),
+        "LB_pval_lag1": round(lb_test.loc[1, "lb_pvalue"], 4),
+        "LB_pval_lag4": round(lb_test.loc[4, "lb_pvalue"], 4),
+        "LB_pval_lag52": round(lb_test.loc[52, "lb_pvalue"], 4)
     }
 
     # Optional: heteroscedasticity tests
     if run_hetero:
-        resid_df = pd.DataFrame({'resid': residuals})
-        exog = np.ones((len(residuals),1))  # intercept-only model
+        exog = np.column_stack([np.ones((len(residuals), np.arange(residuals))])  
         bp_test = het_breuschpagan(residuals, exog)
         white_test = het_white(residuals, exog)
 
-        results_dict["BreuschPagan"] = {
-            "LM stat": bp_test[0], "LM p-value": bp_test[1],
-            "F stat": bp_test[2], "F p-value": bp_test[3]
-        }
-        results_dict["White"] = {
-            "LM stat": white_test[0], "LM p-value": white_test[1],
-            "F stat": white_test[2], "F p-value": white_test[3]
-        }
+        results_dict.update({
+            "BP_LM": round(bp_test[0], 3),
+            "BP_pval": round(bp_test[1], 4),
+            "BP_F": round(bp_test[2], 3),
+            "BP_F_pval": round(bp_test[3], 4),
+            "White_LM": round(white_test[0], 3),
+            "White_pval": round(white_test[1], 4),
+            "White_F": round(white_test[2], 3),
+            "White_F_pval": round(white_test[3], 4),            
+        })
 
     return results_dict

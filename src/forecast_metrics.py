@@ -17,7 +17,7 @@ def forecast_metrics(y_true, y_pred):
     '''
     # convert pandas objcts to numpy arrays
     if hasattr(y_true, 'values'):
-        y_true = y_true.values.flatten() # handls pandas Series and DataFrames
+        y_true = y_true.values.flatten() # handles pandas series and DataFrames
     if hasattr(y_pred, 'values'):
         y_pred = y_pred.values.flatten()
         
@@ -26,12 +26,10 @@ def forecast_metrics(y_true, y_pred):
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mse)
     mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
-    r_squared = r2_score(y_true, y_pred)
 
     return {
         'MAE': round(mae, 3),
         'MSE': round(mse, 3), 
         'RMSE': round(rmse, 3),
-        'MAPE': round(mape,3), 
-        'R-squared': round(r_squared, 3)
+        'MAPE': round(mape, 3)
     }

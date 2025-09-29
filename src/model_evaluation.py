@@ -94,5 +94,5 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         })
 
     results_dict_df = pd.DataFrame([results_dict])
-    model_eval_df = results_dict_df.melt(val_name='Metric', value_name='Value')
+    model_eval_df = results_dict_df.melt(var_name='Metric', value_name='Value')
     return model_eval_df

@@ -46,19 +46,29 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         # Residual time series
         axes[0,0].plot(residuals)
         axes[0,0].set_title("Residuals over Time")
+        axes[0,0].set_xlabel('Time Index')
+        axes[0,0].set_ylabel('Residual Value')
 
         # Histogram + KDE
-        residuals.plot(kind="hist", bins=30, ax=axes[0,1], density=True, alpha=0.6)
+        axes[0,1].hist(residuals, bins=40, density=True, alpha=0.6, label='Histogram')
+        residuals.plot(kind="kde", ax=axes[0,1], linewidth=2, label='KDE')
         residuals.plot(kind="kde", ax=axes[0,1])
         axes[0,1].set_title("Residual Distribution")
+        axes[0,1].set_xlabel('Residual Value')
+        axes[0,1].set_ylabel('Density')
+        axes[0,1].legend()
 
         # QQ plot
         qqplot(residuals, line='s', ax=axes[1,0])
         axes[1,0].set_title("QQ Plot")
+        axes[1,0].set_xlabel('Theoretical Quantiles')
+        axes[1,0].set_ylabel('Sample Quantiles')
 
         # ACF plot
         plot_acf(residuals, lags=52, ax=axes[1,1])
         axes[1,1].set_title("ACF of Residuals")
+        axes[1,1].set_xlabel('Lag')
+        axes[1,1].set_ylabel('Autocorrelation')
 
         plt.tight_layout()
         plt.show()

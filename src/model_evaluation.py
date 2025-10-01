@@ -13,14 +13,15 @@ def check_volatility_clustering(residuals):
     Check for GARCH effects in residuals
     """
     squared_residuals = residuals ** 2
+    volatility_lags = [1, 4, 8, 12, 26]
     
     # Ljung-Box test on squared residuals ( Engle's ARCH test)
-    arch_test = acorr_ljungbox(squared_residuals, lags=[5, 10, 20], return_df=True)
+    arch_test = acorr_ljungbox(squared_residuals, lags=volatility_lags, return_df=True)
     
     print("\n--- Volatility Clustering Diagnostics ---")
     print("Engle's ARCH Test (on squared residuals):")
     print("H0: No ARCH effects (constant variance)")
-    for lag in [5, 10, 20]:
+    for lag in volatility_lags:
         pval = arch_test.loc[lag, "lb_pvalue"]
         sig = "***" if pval < 0.05 else " (no ARCH effects)"
         print(f"  Lag {lag}: p-value = {pval:.4f}{sig}")

@@ -121,6 +121,8 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         "LB_pval_lag52": round(lb_test.loc[52, "lb_pvalue"], 4)
     }
 
+    arch_results = check_volatility_clustering(residuals)
+    
     # Optional: heteroscedasticity tests
     if run_hetero:
         exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])  
@@ -135,8 +137,6 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
     results_dict_df = pd.DataFrame([results_dict])
     model_eval_df = results_dict_df.melt(var_name='Metric', value_name='Value')
     return model_eval_df
-
-    arch_results = check_volatility_clustering(residuals)
 
 
 

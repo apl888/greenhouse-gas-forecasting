@@ -27,7 +27,7 @@ def check_volatility_clustering(residuals):
         print(f"  Lag {lag}: p-value = {pval:.4f}{sig}")
     
     # Visual check
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 4))
     
     # Residuals plot
     ax1.plot(residuals)

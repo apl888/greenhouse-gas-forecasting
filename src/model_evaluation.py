@@ -8,6 +8,42 @@ from statsmodels.stats.stattools import jarque_bera
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.api import qqplot
 
+def check_volatility_clustering(residuals):
+    """
+    Check for GARCH effects in residuals
+    """
+    squared_residuals = residuals ** 2
+    
+    # Ljung-Box test on squared residuals ( Engle's ARCH test)
+    arch_test = acorr_ljungbox(squared_residuals, lags=[5, 10, 20], return_df=True)
+    
+    print("\n--- Volatility Clustering Diagnostics ---")
+    print("Engle's ARCH Test (on squared residuals):")
+    print("H0: No ARCH effects (constant variance)")
+    for lag in [5, 10, 20]:
+        pval = arch_test.loc[lag, "lb_pvalue"]
+        sig = "***" if pval < 0.05 else " (no ARCH effects)"
+        print(f"  Lag {lag}: p-value = {pval:.4f}{sig}")
+    
+    # Visual check
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    
+    # Residuals plot
+    ax1.plot(residuals)
+    ax1.set_title("Residuals over Time")
+    ax1.set_ylabel("Residuals")
+    
+    # Squared residuals plot (shows volatility clustering)
+    ax2.plot(squared_residuals)
+    ax2.set_title("Squared Residuals (Volatility)")
+    ax2.set_ylabel("Squared Residuals")
+    ax2.set_xlabel("Time")
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return arch_test
+
 
 def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_residuals=True):
     """
@@ -99,3 +135,8 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
     results_dict_df = pd.DataFrame([results_dict])
     model_eval_df = results_dict_df.melt(var_name='Metric', value_name='Value')
     return model_eval_df
+
+    arch_results = check_volatility_clustering(residuals)
+
+
+

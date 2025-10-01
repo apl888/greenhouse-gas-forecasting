@@ -52,7 +52,6 @@ def evaluate_sarima_model(train, order, seasonal_order, run_hetero=False, plot_r
         # Histogram + KDE
         axes[0,1].hist(residuals, bins=40, density=True, alpha=0.6, label='Histogram')
         residuals.plot(kind="kde", ax=axes[0,1], linewidth=2, label='KDE')
-        residuals.plot(kind="kde", ax=axes[0,1])
         axes[0,1].set_title("Residual Distribution")
         axes[0,1].set_xlabel('Residual Value')
         axes[0,1].set_ylabel('Density')

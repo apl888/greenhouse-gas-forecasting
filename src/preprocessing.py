@@ -192,8 +192,12 @@ class GasPreprocessor:
         df = df.copy()
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
+        
+        # store the original test set data range
+        original_test_start = df.index.min()
+        original_test_end = df.index.max()
 
-        # Use the new data's own time range (e.g., validation and test datasets)
+        # Use the new data's own time range (e.g., validation and test sets)
         new_series = df[self.gas_name]
         
         # Trim both leading and trailing NaNs
@@ -216,8 +220,20 @@ class GasPreprocessor:
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
         
-        # Limit the resampled data to only the date range of the input data
-        new_resampled = new_resampled.loc[df.index.min():df.index.max()]
+        # Ensure the resampled test set starts where the training ended
+        # calculate exptected start date (train end + 1 week)
+        expected_start = self.data_end_date_ + pd.Timedelta(weeks=1)
+        
+        # If there is a gap, adjust the test set dates to be contiguous
+        if new_resampled.index[0] > expected_start:
+            print(f'Adjusting test set dates to be contiguous with train set')
+            # Create new index starting where the train set ended
+            new_index = pd.date_range(
+                start=expected_start,
+                periods=len(new_resampled),
+                freq=self.resample_freq
+            )
+            new_resampled.index = new_index
 
         # Apply the smoothing and interpolation
         smoothed = self._smooth_series(new_resampled)

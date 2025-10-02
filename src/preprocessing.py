@@ -278,7 +278,7 @@ class GasPreprocessor:
         '''
         last_valid_idx = series.last_valid_index()
         if last_valid_idx is not None and last_valid_idx < series.index[-1]:
-            print(f'Trimming {len(series.loc[last_valid_idx:]) - 1} trailing NaN values')
+            print(f'\nTrimming {len(series.loc[last_valid_idx:]) - 1} trailing NaN values')
             return series.loc[:last_valid_idx]
         return series
     

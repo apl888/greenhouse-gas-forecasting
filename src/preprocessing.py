@@ -288,7 +288,7 @@ class GasPreprocessor:
         '''
         first_valid_idx = series.first_valid_index()
         if first_valid_idx is not None and first_valid_idx > series.index[0]:
-            print(f'Trimming {len(series.loc[:first_valid_idx]) - 1} leading NaN values')
+            print(f'\nTrimming {len(series.loc[:first_valid_idx]) - 1} leading NaN values')
             return series.loc[first_valid_idx:]
         return series
                     

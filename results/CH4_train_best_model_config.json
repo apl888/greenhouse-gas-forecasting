@@ -18,6 +18,14 @@
     "start": "1983-05-08",
     "end": "2023-10-22"
   },
+  "data_points": 2112,
+  "data_frequency": "W",
+  "transformation": "log",
+  "preprocessor_version": "1.0",
+  "cv_performance": {
+    "RMSE_mean": 0.007166,
+    "MAE_mean": 0.005686
+  },
   "fit_method": "lbfgs",
-  "saved_at": "2025-10-02 15:10:32"
+  "saved_at": "2025-10-02 15:14:27"
 }

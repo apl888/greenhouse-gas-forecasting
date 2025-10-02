@@ -13,11 +13,11 @@
   ],
   "trend": "n",
   "enforce_stationarity": false,
-  "envorce_invertibility": false,
+  "enforce_invertibility": false,
   "training_data_range": {
     "start": "1983-05-08",
-    "end": "2023-10-15"
+    "end": "2023-10-22"
   },
   "fit_method": "lbfgs",
-  "saved_at": "2025-10-01 12:34:20"
+  "saved_at": "2025-10-02 15:10:32"
 }

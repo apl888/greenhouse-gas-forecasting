@@ -26,6 +26,13 @@
     "RMSE_mean": 0.01053,
     "MAE_mean": 0.008095
   },
+  "test_performance": {
+    "RMSE_log": 0.005097,
+    "MAE_log": 0.003489,
+    "RMSE_original": 9.868525,
+    "MAE_original": 6.768671
+  },
+  "selection_rationale": "Pareto-optimal balance of simplicity and performance",
   "fit_method": "powell",
-  "saved_at": "2025-10-13 16:28:31"
+  "saved_at": "2025-10-13 18:09:15"
 }

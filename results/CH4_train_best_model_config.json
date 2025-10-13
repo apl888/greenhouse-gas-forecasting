@@ -26,6 +26,13 @@
     "RMSE_mean": 0.010205,
     "MAE_mean": 0.007906
   },
+  "test_performance": {
+    "RMSE_log": 0.004636,
+    "MAE_log": 0.003592,
+    "RMSE_original": 8.983181,
+    "MAE_original": 6.971737
+  },
+  "selection_rationale": "Best overall RMSE in both CV and test validation",
   "fit_method": "powell",
-  "saved_at": "2025-10-13 16:28:31"
+  "saved_at": "2025-10-13 18:09:15"
 }

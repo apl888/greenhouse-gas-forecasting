@@ -1,12 +1,12 @@
 {
   "model_type": "SARIMAX",
   "order": [
-    7,
     1,
-    0
+    1,
+    1
   ],
   "seasonal_order": [
-    1,
+    0,
     1,
     1,
     52
@@ -23,8 +23,8 @@
   "transformation": "log",
   "preprocessor_version": "1.0",
   "cv_performance": {
-    "RMSE_mean": 0.010205,
-    "MAE_mean": 0.007906
+    "RMSE_mean": 0.01053,
+    "MAE_mean": 0.008095
   },
   "fit_method": "powell",
   "saved_at": "2025-10-13 16:28:31"

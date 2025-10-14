@@ -7,6 +7,7 @@ from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan, het_w
 from statsmodels.stats.stattools import jarque_bera
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.api import qqplot
+from scipy import stats
 
 def check_volatility_clustering(residuals):
     '''

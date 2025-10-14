@@ -1,7 +1,7 @@
 # src/forecast_metrics.py
 
 import numpy as np
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 def forecast_metrics(y_true, y_pred):
     '''

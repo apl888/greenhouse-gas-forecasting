@@ -23,7 +23,7 @@ def check_volatility_clustering(residuals):
     print('H0: No ARCH effects (constant variance)')
     for lag in volatility_lags:
         pval = arch_test.loc[lag, 'lb_pvalue']
-        sig = '***' if pval < 0.05 else " (no ARCH effects)'
+        sig = '***' if pval < 0.05 else ' (no ARCH effects)'
         print(f'  Lag {lag}: p-value = {pval:.4f}{sig}')
     
     # Visual check

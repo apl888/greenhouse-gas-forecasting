@@ -100,12 +100,12 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     plt.show()
 
     # Ljung-Box test
-    lb_test = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
+    lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
     print('\n--- Ljung-Box Test ---')
     for lag in [1,5,10,52]:
         print(f'lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}')
     
-    test_check_volatility_clustering(residuals)
+    test_volatility_clustering(residuals)
     
     # Optional: heteroscedasticity tests
     if run_hetero:
@@ -117,7 +117,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     return results
 
 # === 3. Out-of-sample residual diagnostics ===
-def out_of_sample_resid_analysis(model_params, train_data, test_data, model_name):
+def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, model_name):
     '''
     Complete residual diagnostics for test set
     '''
@@ -126,8 +126,8 @@ def out_of_sample_resid_analysis(model_params, train_data, test_data, model_name
     
     # Fit model on training data
     model = SARIMAX(train_data,
-                    order=model_params['order'],
-                    seasonal_order=model_params['seasonal_order'],
+                    order=order,
+                    seasonal_order=seasonal_order,
                     enforce_stationarity=True, 
                     enforce_invertibility=True, 
                     trend='c')

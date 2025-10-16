@@ -77,8 +77,8 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     axes[0,0].set_ylabel('Residual Value')
 
     # Histogram + KDE
-    axes[0,1].hist(residuals, bins=40, density=True, alpha=0.6, label='Hist')
-    residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, label='KDE')
+    axes[0,1].hist(residuals, bins=30, density=True, alpha=0.8, label='Hist')
+    residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
     axes[0,1].set_title('Residual Distribution', fontsize=14)
     axes[0,1].set_xlabel('Residual Value', fontsize=12)
     axes[0,1].set_ylabel('Density', fontsize=12)

@@ -30,14 +30,14 @@ def test_volatility_clustering(residuals, plot=False):
     # Visual check
     if plot:
         fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-        axes[0].plot(residuals, color='steelblue')
-        axes[0].set_title("Residuals Over Time")
-        axes[0].set_ylabel("Residuals")
+        axes[0].plot(residuals)
+        axes[0].set_title('Residuals Over Time', fontsize=14)
+        axes[0].set_ylabel('Residuals', fontsize=12)
 
-        axes[1].plot(squared_residuals, color='tomato')
-        axes[1].set_title("Squared Residuals (Volatility Clustering Check)")
-        axes[1].set_xlabel("Time")
-        axes[1].set_ylabel("Squared Residuals")
+        axes[1].plot(squared_residuals)
+        axes[1].set_title('Squared Residuals (Volatility Clustering Check)', fontsize=124)
+        axes[1].set_xlabel('Time', fontsize=12)
+        axes[1].set_ylabel('Squared Residuals', fontsize=12)
 
         plt.tight_layout()
         plt.show()

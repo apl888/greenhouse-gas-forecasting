@@ -117,7 +117,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     return results
 
 # === 3. Out-of-sample residual diagnostics ===
-def comprehensive_residual_analysis(model_params, train_data, test_data, model_name):
+def out_of_sample_residual_analysis(model_params, train_data, test_data, model_name):
     '''
     Complete residual diagnostics for test set
     '''
@@ -190,6 +190,7 @@ def comprehensive_residual_analysis(model_params, train_data, test_data, model_n
     
     return residuals, results
 
+# === 4. Summary assumption check ===
 def summarize_model_assumptions(residuals, alpha=0.05):
     '''
     Evaluate normality, zero-mean, and autocorrelation assumptions.

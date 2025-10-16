@@ -79,6 +79,10 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     # Histogram + KDE
     axes[0,1].hist(residuals, bins=30, density=True, alpha=0.8, label='Hist')
     residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
+    # Theoretical normal curve
+    x_vals = np.linspace(residuals.min(), residuals.max(), 200)
+    normal_pdf = stats.norm.pdf(x_vals, loc=residuals.mean(), scale=residuals.std())
+    axes[0,1].plot(x_vals, normal_pdf, color='r', linestyle='--', label='Normal PDF')
     axes[0,1].set_title('Residual Distribution', fontsize=14)
     axes[0,1].set_xlabel('Residual Value', fontsize=12)
     axes[0,1].set_ylabel('Density', fontsize=12)

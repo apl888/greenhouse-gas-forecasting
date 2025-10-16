@@ -9,7 +9,7 @@ from statsmodels.api import qqplot
 from scipy import stats
 
 # === 1. Volatility / ARCH Check ===
-def test_volatility_clustering(residuals, plot=True):
+def test_volatility_clustering(residuals, plot=False):
     '''
     Check for GARCH effects in residuals
     '''

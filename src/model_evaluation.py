@@ -117,7 +117,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     return results
 
 # === 3. Out-of-sample residual diagnostics ===
-def out_of_sample_residual_analysis(model_params, train_data, test_data, model_name):
+def out_of_sample_resid_analysis(model_params, train_data, test_data, model_name):
     '''
     Complete residual diagnostics for test set
     '''

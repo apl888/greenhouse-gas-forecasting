@@ -105,7 +105,9 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
 
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
-    print('\n--- Ljung-Box Test ---')
+    print('\n--- Autocorrelation Diagnostics ---')
+    print('Ljung-Box Test')
+    print('H0: No autocorrelation up to specified lags')
     for lag in [1,5,10,52]:
         print(f'lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}')
     

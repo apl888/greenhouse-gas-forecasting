@@ -109,7 +109,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
     print('Ljung-Box Test')
     print('H0: No autocorrelation up to specified lags')
     for lag in [1,5,10,52]:
-        print(f'lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}')
+        print(f"lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
     
     test_volatility_clustering(residuals)
     
@@ -171,7 +171,7 @@ def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, m
     # Residuals over time
     axes[0,0].plot(residuals.index, residuals.values)
     axes[0,0].axhline(y=0, color='r', linestyle='--')
-    axes[0,0].set_title(f'{model_name} - Test Residuals Over Time', fontsize=14)
+    axes[0,0].set_title(f'{model_name} - Prediction Test Residuals Over Time', fontsize=14)
     axes[0,0].set_ylabel('Residual', fontsize=12)
     axes[0,0].set_xlabel('Date', fontsize=12)
         

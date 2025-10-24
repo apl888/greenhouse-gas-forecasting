@@ -68,14 +68,8 @@ class GasPreprocessor:
     def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
         df = df.copy()
-        
-        # Allow either 'date' column or DatetimeIndex
-        if 'date' in df.columns:
-            df = df.set_index('date')
-        elif isinstance(df.index, pd.DatetimeIndex):
-            pass
-        else:
-            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
 
         raw_series = df[self.gas_name]
         
@@ -104,9 +98,11 @@ class GasPreprocessor:
         # Apply transformation (on the trimmed series with only positive values)
         if self.transformation:
             print(f'[INFO] Applying {self.transformation} transformation.')
-            working_series = self._apply_transform(trimmed_series)
+            transformed_series = self._apply_transform(trimmed_series)
+            
+            working_series = transformed_series.copy()
         else:
-            working_series = trimmed_series
+            working_series = trimmed_series.copy()
 
         # Handle missing dates and get a uniform frequency by resampling.
         # This creates a 'preliminary' series for the decomposition step.
@@ -194,12 +190,8 @@ class GasPreprocessor:
             raise ValueError('You must call .fit() before .transform().')
 
         df = df.copy()
-        if 'date' in df.columns:
-            df = df.set_index('date')
-        elif isinstance(df.index, pd.DatetimeIndex):
-            pass
-        else:
-            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
         
         # store the original test set data range
         original_test_start = df.index.min()
@@ -220,16 +212,17 @@ class GasPreprocessor:
             
         # Apply transformation (using parameters learned during fit)
         if self.transformation:
-            working_series = self._apply_transform(trimmed_series)
+            transformed_new_series = self._apply_transform(trimmed_series)
+            working_series = transformed_new_series 
         else:
-            working_series = trimmed_series
+            working_series = trimmed_series.copy()
                     
         # Resample the new data to the same frequency used in fit()
         new_resampled = working_series.resample(self.resample_freq).mean()
         
         # Ensure the resampled test set starts where the training ended
         # calculate exptected start date (train end + 1 week)
-        expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(self.resample_freq)
+        expected_start = self.data_end_date_ + pd.Timedelta(weeks=1)
         
         # If there is a gap, adjust the test set dates to be contiguous
         if new_resampled.index[0] > expected_start:

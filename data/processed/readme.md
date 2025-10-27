@@ -1,28 +1,30 @@
 # Processed Data Documentation  
 **Location:** `../data/processed/`  
 
-This directory contains cleaned and transformed greenhouse gas (GHG) datasets, primarily focused on methane (CH₄), prepared for time series forecasting.  
+This directory contains cleaned and transformed greenhouse gas (GHG) datasets, focused on methane (CH₄), prepared for time series forecasting.  
 
 ---
 
 ## File Descriptions  
 
-### 1. **Multi-Gas Datasets**  
-#### `all_ghg_aligned.csv`  
+### 1. **Initial Datasets**  
+#### `ch4_raw_dropped_cols.csv`  
 - **Source:** NOAA flask measurements at Mauna Loa Observatory, Hawaii  
 - **Variables:**  
   - `datetime`: Timestamp (weekly frequency)  
-  - `value`: Atmospheric concentrations (ppb/ppm) for six gases:  
-    - CH₄ (methane), CO (carbon monoxide), CO₂ (carbon dioxide)  
-    - H₂ (hydrogen), N₂O (nitrous oxide), SF₆ (sulfur hexafluoride)  
+  - `value`: Atmospheric greenhouse gas concentration(s) (CH4: nmol/mol (ppb))
+  - `value_unc`: Value uncertainty values reported in same unit as "value". Missing data coded as -999.999.
+  - `qcflag`: 3-character flags to indicate retained or rejected flask results.
+  - `method`: single-character code used to identify the sample collection method.
+- **Reference for dataset features:** NOAA MLO methane flask dataset README ([gml.noaa.gov/aftp ...](https://gml.noaa.gov/aftp/data/trace_gases/ch4/flask/surface/README_ch4_surface-flask_ccgg.html))
 - **Created in:** `1_data_loading.ipynb`  
-- **Used in:** `2_all_gas_eda.ipynb`  
+- **Used in:** `2_ch4_eda.ipynb`  
 
-#### `all_ghg_aligned_nan.csv`  
+#### `df_model.csv`  
 - **Modifications:**  
   - Negative concentrations → `NaN` (physically implausible values)  
 - **Purpose:** Sanitized baseline for CH₄-focused analysis  
-- **Created in:** `2_all_gas_eda.ipynb`  
+- **Created in:** `2_ch4_eda.ipynb`  
 - **Used in:** `3_ch4_preprocessing.ipynb`, `4_ch4_modeling.ipynb`  
 
 ---

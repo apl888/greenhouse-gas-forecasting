@@ -37,16 +37,18 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
 ---
 
 ### 2. **Preprocessed data**  
-#### `ch4_preprocessed.csv`  
+#### `ch4_preprocessed_df.csv`  
 - **Processing Steps:**  
-  1. Isolated CH4 from `all_ghg_aligned_nan.csv`  
-  2. Handled `NaN`s/outliers via linear interpolation  
-  3. Resampled to consistent weekly frequency (`W-SUN`)  
+  1. Resampled to consistent weekly frequency (`W-SUN`) 
+  2. Outlier detection and mask via IQR
+  3. Smoothing via rolling median (window = 7)
+  3. Interpolation - linear interpolation to replace NaNs resulting from resampling and outlier masking
 - **Structure:**  
-  - `date`: DateTime index  
-  - `value`: 4 concentration (ppb)  
+  - `date`: DateTime64[ns] index  
+  - `ch4_ppb`: float64 
+  - `value_unc`: float64
 - **Created in:** `3_ch4_preprocessing.ipynb`  
-- **Used in:** `6a_ch4_static_forecast.ipynb`, `6b_ch4_rolling_forecast.ipynb`  
+- **Used in:** `4_ch4_modeling.ipynb`  
 
 #### `ch4_preprocessed_logged.csv`  
 - **Transformation:** Natural log of `ch4_preprocessed.csv` values  

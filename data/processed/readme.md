@@ -23,7 +23,7 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
 #### `df_model.csv`  
 - **Modifications:**  
   - removed observations where value or value_unc has fill values (-999.99 and -999.999 resepctively).  
-  - removed observations where value_unc >= 
+  - removed observations where value_unc >= 3
   - removed observations where qcflag == M.., C.., or B.. (flags for rejection)
   - dropped method due to the lack of significant quantifiable difference between P and S
   - aggregated the mean sample values per collection date due to replicate assays
@@ -32,7 +32,7 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
   - trimmed data to start at 1991-01-01 due to data quality issues (qcflags and value_unc scores)
 - **Purpose:** cleaned baseline for CH4-focused analysis  
 - **Created in:** `2_ch4_eda.ipynb`  
-- **Used in:** `3_ch4_preprocessing.ipynb`, `4_ch4_modeling.ipynb`  
+- **Used in:** `3_ch4_preprocessing_eda.ipynb`, `4_ch4_modeling.ipynb`  
 
 ---
 
@@ -47,14 +47,8 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
   - `date`: DateTime64[ns] index  
   - `ch4_ppb`: float64 
   - `value_unc`: float64
-- **Created in:** `3_ch4_preprocessing.ipynb`  
-- **Used in:** `4_ch4_modeling.ipynb`  
-
-#### `ch4_preprocessed_logged.csv`  
-- **Transformation:** Natural log of `ch4_preprocessed.csv` values  
-- **Purpose:** Stabilize variance for SARIMA modeling  
-- **Created in:** `5_ch4_forecasting.ipynb`  
-- **Used in:** `6a_ch4_static_forecast.ipynb`, `6b_ch4_rolling_forecast.ipynb`  
+- **Created in:** `3_ch4_preprocessing_eda.ipynb`  
+- **Used in:** reference only   
 
 ---
 

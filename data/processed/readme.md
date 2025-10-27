@@ -10,7 +10,7 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
 ### 1. **Initial Datasets**  
 #### `ch4_raw_dropped_cols.csv`  
 - **Source:** NOAA flask measurements at Mauna Loa Observatory, Hawaii  
-- **Variables:**  
+- **Features kept:**  
   - `datetime`: Timestamp (weekly frequency)  
   - `value`: Atmospheric greenhouse gas concentration(s) (CH4: nmol/mol (ppb))
   - `value_unc`: Value uncertainty values reported in same unit as "value". Missing data coded as -999.999.
@@ -22,22 +22,29 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
 
 #### `df_model.csv`  
 - **Modifications:**  
-  - Negative concentrations → `NaN` (physically implausible values)  
-- **Purpose:** Sanitized baseline for CH₄-focused analysis  
+  - removed observations where value or value_unc has fill values (-999.99 and -999.999 resepctively).  
+  - removed observations where value_unc >= 
+  - removed observations where qcflag == M.., C.., or B.. (flags for rejection)
+  - dropped method due to the lack of significant quantifiable difference between P and S
+  - aggregated the mean sample values per collection date due to replicate assays
+  - aggregated the mean value_unc per collection date due to replicate assays
+  - aggregated the mode of qcflag per collection date due to replicate assays
+  - trimmed data to start at 1991-01-01 due to data quality issues (qcflags and value_unc scores)
+- **Purpose:** cleaned baseline for CH4-focused analysis  
 - **Created in:** `2_ch4_eda.ipynb`  
 - **Used in:** `3_ch4_preprocessing.ipynb`, `4_ch4_modeling.ipynb`  
 
 ---
 
-### 2. **CH₄-Specific Datasets**  
+### 2. **Preprocessed data**  
 #### `ch4_preprocessed.csv`  
 - **Processing Steps:**  
-  1. Isolated CH₄ from `all_ghg_aligned_nan.csv`  
+  1. Isolated CH4 from `all_ghg_aligned_nan.csv`  
   2. Handled `NaN`s/outliers via linear interpolation  
   3. Resampled to consistent weekly frequency (`W-SUN`)  
 - **Structure:**  
   - `date`: DateTime index  
-  - `value`: CH₄ concentration (ppb)  
+  - `value`: 4 concentration (ppb)  
 - **Created in:** `3_ch4_preprocessing.ipynb`  
 - **Used in:** `6a_ch4_static_forecast.ipynb`, `6b_ch4_rolling_forecast.ipynb`  
 

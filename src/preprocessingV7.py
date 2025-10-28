@@ -47,17 +47,8 @@ class GasPreprocessor:
     
 # Section 1: Public interface methods
     
-    def __init__(self, 
-                 gas_name, 
-                 seasonal_period=52, 
-                 resample_freq=None,
-                 window=7, 
-                 iqr_factor=1.5, 
-                 interpolate_method='linear', 
-                 lags=52, 
-                 do_eda=False, 
-                 transformation=None, 
-                 bc_lambda=None):
+    def __init__(self, gas_name, seasonal_period=52, window=7, iqr_factor=1.5, interpolate_method='linear', 
+                 resample_freq='W', lags=52, do_eda=True, transformation=None, bc_lambda=None):
         self.gas_name = gas_name
         self.seasonal_period = seasonal_period
         self.window = window
@@ -73,15 +64,9 @@ class GasPreprocessor:
         self.trained_ = False       
         self.fitted_lambda_ = None
         self.outlier_mask_ = None
-        
-    '''
-    If resample_freq=None, the input data is assumed to already have a regular frequency.
-    No resampling is applied internally.
-    '''
 
     def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
-        print(f"[INFO] Starting fit() for {self.gas_name} | Resample freq = {self.resample_freq or 'None (using existing index)'}")
         df = df.copy()
         
         # Allow either 'date' column or DatetimeIndex
@@ -91,15 +76,6 @@ class GasPreprocessor:
             pass
         else:
             raise ValueError("Input must have a 'date' column or DatetimeIndex.")
-        
-        # Optional resampling
-        if self.resample_freq:
-            df = df.resample(self.resample_freq).mean()
-            print(f"[INFO] Data resampled to {self.resample_freq} frequency.")
-        else:
-            inferred = pd.infer_freq(df.index)
-            if inferred is None:
-                print(f"[Warning] {self.gas_name}: input index has irregular frequency — no resampling applied.")
 
         raw_series = df[self.gas_name]
         
@@ -107,7 +83,7 @@ class GasPreprocessor:
         trimmed_series = self._trim_leading_nans(raw_series)
         trimmed_series = self._trim_trailing_nans(trimmed_series)
         
-        # Store the actual data boundaries for reference
+        # Store the actual data bounaries for reference
         self.data_start_date_ = trimmed_series.first_valid_index()
         self.data_end_date_ = trimmed_series.last_valid_index()    
         
@@ -133,10 +109,8 @@ class GasPreprocessor:
             working_series = trimmed_series
 
         # Handle missing dates and get a uniform frequency by resampling.
-        if self.resample_freq:
-            resampled_series = working_series.resample(self.resample_freq).mean()
-        else:
-            resampled_series = working_series
+        # This creates a 'preliminary' series for the decomposition step.
+        resampled_series = working_series.resample(self.resample_freq).mean()
         
         # Debug after resampling
         print(f'After resampling: {len(resampled_series)} points, {resampled_series.isna().sum()} NaNs')
@@ -204,7 +178,6 @@ class GasPreprocessor:
             self.stl_result_ = STL(interpolated, period=self.seasonal_period, robust=True).fit()
 
         self.trained_ = True
-        self.cleaned_series_ = interpolated
         return self
 
     def transform(self, df, custom_title=None):
@@ -251,21 +224,13 @@ class GasPreprocessor:
         else:
             working_series = trimmed_series
                     
-        # Resample only if frequency was specified
-        if self.resample_freq:
-            new_resampled = working_series.resample(self.resample_freq).mean()
-        else:
-            new_resampled = working_series
+        # Resample the new data to the same frequency used in fit()
+        new_resampled = working_series.resample(self.resample_freq).mean()
         
         # Ensure the resampled test set starts where the training ended
         # calculate exptected start date (train end + 1 week)
-        if not hasattr(self, "data_end_date_"):
-            raise ValueError("You must fit the preprocessor before using transform().")
-        if self.resample_freq:
-            expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(self.resample_freq)
-        else:
-            expected_start = self.data_end_date_
-    
+        expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(self.resample_freq)
+        
         # If there is a gap, adjust the test set dates to be contiguous
         if new_resampled.index[0] > expected_start:
             print(f'Adjusting test set dates to be contiguous with train set')
@@ -400,7 +365,7 @@ class GasPreprocessor:
                     return np.exp(series) 
                 else: 
                     # Correct inverse Box-Cox transformation
-                    return np.power(series * self.fitted_lambda_ + 1, 1 / self.fitted_lambda_)
+                    return (series * self.fitted_lambda_ + 1) ** (1 / self.fitted_lambda_)
 
 
     def _smooth_series(self, series):
@@ -416,7 +381,7 @@ class GasPreprocessor:
             series = series.loc[self.start_date_:]
             
         # interpolate within the valid data range
-        interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both', limit_area='inside')       
+        interpolated = series.interpolate(method=self.interpolate_method, limit_direction='both')       
             
         return interpolated
     

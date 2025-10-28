@@ -18,7 +18,7 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
   - `method`: single-character code used to identify the sample collection method.
 - **Reference for dataset features:** NOAA MLO methane flask dataset README ([gml.noaa.gov/aftp ...](https://gml.noaa.gov/aftp/data/trace_gases/ch4/flask/surface/README_ch4_surface-flask_ccgg.html))
 - **Created in:** `1_data_loading.ipynb`  
-- **Used in:** `2_ch4_eda.ipynb`  
+- **Used in:** `2_ch4_eda_clean.ipynb`  
 
 #### `df_model.csv`  
 - **Modifications:**  
@@ -31,7 +31,7 @@ This directory contains cleaned and transformed greenhouse gas (GHG) datasets, f
   - aggregated the mode of qcflag per collection date due to replicate assays
   - trimmed data to start at 1991-01-01 due to data quality issues (qcflags and value_unc scores)
 - **Purpose:** cleaned baseline for CH4-focused analysis  
-- **Created in:** `2_ch4_eda.ipynb`  
+- **Created in:** `2_ch4_eda_clean.ipynb`  
 - **Used in:** `3_ch4_preprocessing_eda.ipynb`, `4_ch4_modeling.ipynb`  
 
 ---

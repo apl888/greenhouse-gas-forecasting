@@ -90,7 +90,7 @@ class GasPreprocessor:
         elif isinstance(df.index, pd.DatetimeIndex):
             pass
         else:
-            raise ValueError('Input must have a 'date' column or DatetimeIndex.')
+            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
         
         # Optional resampling
         if self.resample_freq:

@@ -90,16 +90,16 @@ class GasPreprocessor:
         elif isinstance(df.index, pd.DatetimeIndex):
             pass
         else:
-            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
+            raise ValueError('Input must have a 'date' column or DatetimeIndex.')
         
         # Optional resampling
         if self.resample_freq:
             df = df.resample(self.resample_freq).mean()
-            print(f"[INFO] Data resampled to {self.resample_freq} frequency.")
+            print(f'[INFO] Data resampled to {self.resample_freq} frequency.')
         else:
             inferred = pd.infer_freq(df.index)
             if inferred is None:
-                print(f"[Warning] {self.gas_name}: input index has irregular frequency — no resampling applied.")
+                print(f'[Warning] {self.gas_name}: input index has irregular frequency — no resampling applied.')
 
         raw_series = df[self.gas_name]
         
@@ -225,7 +225,7 @@ class GasPreprocessor:
         pd.Series: Transformed gas time series (smoothed, resampled, and interpolated).
         '''
         # Force test data to use same frequency as training
-        if not self.resample_freq and hasattr(self, "cleaned_series_") and self.cleaned_series_.index.freq is not None:
+        if not self.resample_freq and hasattr(self, 'cleaned_series_') and self.cleaned_series_.index.freq is not None:
             df = df.asfreq(self.cleaned_series_.index.freq)
             
         if not self.trained_:
@@ -237,7 +237,7 @@ class GasPreprocessor:
         elif isinstance(df.index, pd.DatetimeIndex):
             pass
         else:
-            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
+            raise ValueError('Input must have a 'date' column or DatetimeIndex.')
         
         # store the original test set data range
         original_test_start = df.index.min()
@@ -270,8 +270,8 @@ class GasPreprocessor:
         
         # Ensure the resampled test set starts where the training ended
         # calculate exptected start date (train end + 1 week)
-        if not hasattr(self, "data_end_date_"):
-            raise ValueError("You must fit the preprocessor before using transform().")
+        if not hasattr(self, 'data_end_date_'):
+            raise ValueError('You must fit the preprocessor before using transform().')
         if self.resample_freq:
             expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(self.resample_freq)
         else:
@@ -300,9 +300,9 @@ class GasPreprocessor:
         is_training_data = (df.index.equals(self.cleaned_series_.index)) if hasattr(self, 'cleaned_series_') else False
     
         # Only remove overlap for test data, not training data
-        if hasattr(self, "data_end_date_") and not is_training_data:
+        if hasattr(self, 'data_end_date_') and not is_training_data:
             if interpolated.index[0] <= self.data_end_date_:
-                print(f"[INFO] Dropping overlapping test point at {interpolated.index[0]} (train end = {self.data_end_date_})")
+                print(f'[INFO] Dropping overlapping test point at {interpolated.index[0]} (train end = {self.data_end_date_})')
                 interpolated = interpolated.loc[interpolated.index > self.data_end_date_]
 
         return interpolated
@@ -423,9 +423,10 @@ class GasPreprocessor:
                 if self.fitted_lambda_ == 0:
                     return np.exp(series) 
                 else: 
-                    # Correct inverse Box-Cox transformation
-                    return np.power(series * self.fitted_lambda_ + 1, 1 / self.fitted_lambda_)
-
+                    # inverse Box-Cox transformation
+                    return np.exp(np.log(series * self.fitted_lambda_ + 1) / self.fitted_lambda_)
+            else:
+                raise ValueError(f'Unsupported transformation for inverse: {self.transformation}')
 
     def _smooth_series(self, series):
         return series.rolling(window=self.window, center=True, min_periods=1).median()

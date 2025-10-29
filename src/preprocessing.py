@@ -205,6 +205,13 @@ class GasPreprocessor:
 
         self.trained_ = True
         self.cleaned_series_ = interpolated
+        
+        # Force a fixed weekly frequency (if the data is roughly weekly) to lock alignment
+        if self.resample_freq is None:
+            inferred_freq = pd.infer_freq(self.cleaned_series_.index)
+            if inferred_freq:
+                self.cleaned_series_ = self.cleaned_series_.asfreq(inferred_freq)
+        
         return self
 
     def transform(self, df, custom_title=None):
@@ -217,6 +224,10 @@ class GasPreprocessor:
         Returns:
         pd.Series: Transformed gas time series (smoothed, resampled, and interpolated).
         '''
+        # Force test data to use same frequency as training
+        if not self.resample_freq and hasattr(self, "cleaned_series_") and self.cleaned_series_.index.freq is not None:
+            df = df.asfreq(self.cleaned_series_.index.freq)
+            
         if not self.trained_:
             raise ValueError('You must call .fit() before .transform().')
 

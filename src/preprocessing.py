@@ -296,6 +296,12 @@ class GasPreprocessor:
             
         interpolated = self._interpolate_series(smoothed)
         
+        # Remove overlap with training end date (if any)
+        if hasattr(self, "data_end_date_"):
+            if interpolated.index[0] <= self.data_end_date_:
+                print(f"[INFO] Dropping overlapping test point at {interpolated.index[0]} (train end = {self.data_end_date_})")
+                interpolated = interpolated.loc[interpolated.index > self.data_end_date_]
+        
         if interpolated.index.freq != self.cleaned_series_.index.freq:
             print(f"[Warning] Frequency mismatch detected — forcing {self.cleaned_series_.index.freq}")
             interpolated = interpolated.asfreq(self.cleaned_series_.index.freq)

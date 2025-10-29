@@ -297,7 +297,7 @@ class GasPreprocessor:
         interpolated = self._interpolate_series(smoothed)
         
         # Check if we're transforming the training data (same as fitted data)
-        is_training_data = (df.index.equals(self.cleaned_series_.index) if hasattr(self, 'cleaned_series_') else False
+        is_training_data = (df.index.equals(self.cleaned_series_.index)) if hasattr(self, 'cleaned_series_') else False
     
         # Only remove overlap for test data, not training data
         if hasattr(self, "data_end_date_") and not is_training_data:

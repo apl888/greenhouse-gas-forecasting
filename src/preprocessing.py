@@ -224,10 +224,6 @@ class GasPreprocessor:
         Returns:
         pd.Series: Transformed gas time series (smoothed, resampled, and interpolated).
         '''
-        # Force test data to use same frequency as training
-        if not self.resample_freq and hasattr(self, 'cleaned_series_') and self.cleaned_series_.index.freq is not None:
-            df = df.asfreq(self.cleaned_series_.index.freq)
-            
         if not self.trained_:
             raise ValueError('You must call .fit() before .transform().')
 
@@ -238,6 +234,14 @@ class GasPreprocessor:
             pass
         else:
             raise ValueError("Input must have a 'date' column or DatetimeIndex.")
+        
+        # Force test data to use same frequency as training
+        if self.cleaned_series_.index.freq is not None:
+            target_freq = self.cleaned_series_.index.freq
+        else:
+            target_freq = pd.infer_freq(self.cleaned_series_.index) or 'W-SUN'
+
+        df = df.asfreq(target_freq)
         
         # store the original test set data range
         original_test_start = df.index.min()
@@ -262,11 +266,15 @@ class GasPreprocessor:
         else:
             working_series = trimmed_series
                     
-        # Resample only if frequency was specified
+        # Determine target frequency from training if not explicitly set
         if self.resample_freq:
             new_resampled = working_series.resample(self.resample_freq).mean()
         else:
-            new_resampled = working_series
+            if self.cleaned_series_.index.freq is not None:
+                target_freq = self.cleaned_series_.index.freq
+            else:
+                target_freq = pd.infer_freq(self.cleaned_series_.index) or 'W-SUN'
+            new_resampled = working_series.asfreq(target_freq)
         
         # Ensure the resampled test set starts where the training ended
         # calculate exptected start date (train end + 1 week)
@@ -284,7 +292,7 @@ class GasPreprocessor:
             new_index = pd.date_range(
                 start=expected_start,
                 periods=len(new_resampled),
-                freq=self.resample_freq
+                freq=self.resample_freq or target_freq
             )
             new_resampled.index = new_index
 

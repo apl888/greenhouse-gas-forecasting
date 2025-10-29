@@ -290,7 +290,15 @@ class GasPreprocessor:
 
         # Apply the smoothing and interpolation
         smoothed = self._smooth_series(new_resampled)
+        # Enforce same frequency as training before interpolation
+        if self.cleaned_series_.index.freq is not None:
+            smoothed = smoothed.asfreq(self.cleaned_series_.index.freq)
+            
         interpolated = self._interpolate_series(smoothed)
+        
+        if interpolated.index.freq != self.cleaned_series_.index.freq:
+            print(f"[Warning] Frequency mismatch detected — forcing {self.cleaned_series_.index.freq}")
+            interpolated = interpolated.asfreq(self.cleaned_series_.index.freq)
 
         return interpolated
 

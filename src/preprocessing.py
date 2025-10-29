@@ -237,7 +237,7 @@ class GasPreprocessor:
         elif isinstance(df.index, pd.DatetimeIndex):
             pass
         else:
-            raise ValueError('Input must have a 'date' column or DatetimeIndex.')
+            raise ValueError("Input must have a 'date' column or DatetimeIndex.")
         
         # store the original test set data range
         original_test_start = df.index.min()
@@ -437,7 +437,7 @@ class GasPreprocessor:
             raise ValueError('start_date_ must be set before calling _interpolate_series')
         # Ensure we're not trying to interpolate before the first valid date
         if series.index.min() < self.start_date_:
-            print(f"Warning: Series contains dates before {self.start_date_}. Trimming to valid range.")
+            print(f'Warning: Series contains dates before {self.start_date_}. Trimming to valid range.')
             series = series.loc[self.start_date_:]
             
         # interpolate within the valid data range

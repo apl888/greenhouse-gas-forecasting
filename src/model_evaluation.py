@@ -45,7 +45,7 @@ def test_volatility_clustering(residuals, plot=False):
     return arch_test
 
 # === 2. In-sample residual diagnostics ===
-def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
+def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False, trim_first=False):
     '''
     Fit a SARIMA model and run in-sample diagnostics.
     
@@ -59,6 +59,8 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
         SARIMA seasonal (P,D,Q,s).
     run_hetero : bool, default False
         If True, runs Breusch-Pagan and White tests for heteroscedasticity.
+    trim_first : bool, default False
+        If True, drops the first residual before diagnostic plots and tests.
     '''
     
     # --- Fit model ---
@@ -66,6 +68,11 @@ def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False):
                     enforce_stationarity=True, enforce_invertibility=True, trend='c')
     results = model.fit(method='powell', disp=False)
     residuals = results.resid
+    
+    # optionally trim the first residual (if it is a model warm-up artifact)
+    if trim_first:
+        residuals = residuals.iloc[1:]
+        print('Note: First residual removed vefore plotting and diagnostics.\n')
 
     # --- Plot residual diagnostics ---
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))

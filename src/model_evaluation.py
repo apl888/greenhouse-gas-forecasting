@@ -169,11 +169,11 @@ def test_volatility_clustering(residuals, plot=False):
     
     print('\n--- Volatility Clustering Diagnostics ---')
     print("Engle's ARCH Test (on squared residuals):")
-    print('H0: No ARCH effects (constant variance)')
+    print('(H0: No ARCH effects (constant variance))')
     for lag in lags:
         pval = arch_test.loc[lag, 'lb_pvalue']
         sig = '***' if pval < 0.05 else ''
-        print(f'  Lag {lag}: p-value = {pval:.4f}{sig}')
+        print(f'\tLag {lag}: p-value = {pval:.4f}{sig}')
     
     # Visual check
     if plot:

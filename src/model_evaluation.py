@@ -297,8 +297,9 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     
     # Jarque-Bera
     jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
-    print(f'Jarque-Bera test: JB={jb_stat:.2f}, p={jb_pvalue:.4f}')
-    print(f'  Skewness={skew:.3f}, kurtosis={kurtosis:.3f}')
+    print(f'Jarque-Bera test: JB = {jb_stat:.2f}, p = {jb_pvalue:.4f}')
+    print(f'\tSkewness={skew:.3f}')
+    print(f'\tkurtosis={kurtosis:.3f}')
 
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)

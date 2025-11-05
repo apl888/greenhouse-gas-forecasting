@@ -293,13 +293,15 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     # Durbin-Watson 
     dw_stat = durbin_watson(residuals)
     print(f'Durbin-Watson statistic: {dw_stat:.3f}')
-    print('<2: positive autocorrelation \n~= 2: no autocorrelation \n>2: negative autocorrelation\n')
+    print('\t<2: positive autocorrelation \n\t~= 2: no autocorrelation \n\t>2: negative autocorrelation\n')
     
     # Jarque-Bera
     jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
-    print(f'Jarque-Bera test: JB = {jb_stat:.2f}, p = {jb_pvalue:.4f}')
-    print(f'\tSkewness={skew:.3f}')
-    print(f'\tkurtosis={kurtosis:.3f}')
+    print('Jarque-Bera test:')
+    print(f'\tJB = {jb_stat:.2f}')
+    print(f'\tp = {jb_pvalue:.4f}')
+    print(f'\tSkewness = {skew:.3f}')
+    print(f'\tkurtosis  kurtosis:.3f}')
 
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)

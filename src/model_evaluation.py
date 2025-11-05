@@ -301,7 +301,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     print(f'\tJB = {jb_stat:.2f}')
     print(f'\tp = {jb_pvalue:.4f}')
     print(f'\tSkewness = {skew:.3f}')
-    print(f'\tkurtosis  kurtosis:.3f}')
+    print(f'\tkurtosis = {kurtosis:.3f}')
 
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)

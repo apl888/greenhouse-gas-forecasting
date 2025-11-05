@@ -306,10 +306,10 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
     print('\n--- Autocorrelation Diagnostics ---')
-    print('Ljung-Box Test')
-    print('H0: No autocorrelation up to specified lags')
+    print('Ljung-Box Test:')
+    print('(H0: No autocorrelation up to specified lags)')
     for lag in [1,5,10,52]:
-        print(f"lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
+        print(f"\tlag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
         
     # Optional volatility clustering test
     try:
@@ -323,8 +323,8 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
         bp_p = het_breuschpagan(residuals, exog)[1]
         white_p = het_white(residuals, exog)[1]
         print('\n--- Heteroscedasticity Tests ---')
-        print(f'Breusch-Pagan p = {bp_p:.4f}')
-        print(f'White p = {white_p:.4f}')
+        print(f'Breusch-Pagan: p = {bp_p:.4f}')
+        print(f'White: p = {white_p:.4f}')
 
     return results
 

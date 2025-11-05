@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from tqdm import tqdm
 import warnings
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
@@ -192,34 +192,62 @@ def test_volatility_clustering(residuals, plot=False):
     return arch_test
 
 # === 2. In-sample residual diagnostics ===
-def in_sample_resid_analysis(train, order, seasonal_order, run_hetero=False, trim_first=False):
+def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero=False, trim_first=False):
     '''
     Fit a SARIMA model and run in-sample diagnostics.
     
     Parameters
     ----------
-    train : pd.Series
+    train          : pd.Series
         Training set (time-indexed).
-    order : tuple
+    order          : tuple
         SARIMA (p,d,q).
     seasonal_order : tuple
         SARIMA seasonal (P,D,Q,s).
-    run_hetero : bool, default False
+    exog           : pd.DataFrame or np.ndarray, optional
+        Exogenous variables for SARIMAX (must align with 'train' index)
+    run_hetero     : bool, default False
         If True, runs Breusch-Pagan and White tests for heteroscedasticity.
-    trim_first : bool, default False
+    trim_first     : bool, default False
         If True, drops the first residual before diagnostic plots and tests.
     '''
     
     # --- Fit model ---
     model = SARIMAX(train, order=order, seasonal_order=seasonal_order,
-                    enforce_stationarity=True, enforce_invertibility=True, trend='c')
-    results = model.fit(method='powell', disp=False)
+                    exog=exog, enforce_stationarity=True, enforce_invertibility=True, 
+                    trend='c')
+    results = model.fit(method='lbfgs', disp=False)
+    fitted_values = results.fittedvalues
     residuals = results.resid
     
     # optionally trim the first residual (if it is a model warm-up artifact)
     if trim_first:
+        fitted_values = fitted_values.iloc[1:]
         residuals = residuals.iloc[1:]
         print('Note: First residual removed vefore plotting and diagnostics.\n')
+        
+    # --- Compute in-sample accuracy metrics ---
+    rmse = np.sqrt(mean_squared_error(train.iloc[-len(fitted_values):], fitted_values))
+    mae = mean_absolute_error(train.iloc[-len(fitted_values):], fitted_values)
+    mape = np.mean(np.abs((train.iloc[-len(fitted_values):] - fitted_values) / 
+                          train.iloc[-len(fitted_values):])) * 100
+    r2 = r2_score(train.iloc[-len(fitted_values):], fitted_values)
+
+    print(f"\n--- In-Sample Accuracy ---")
+    print(f"RMSE: {rmse:.3f}")
+    print(f"MAE:  {mae:.3f}")
+    print(f"MAPE: {mape:.2f}%")
+    print(f"R²:   {r2:.3f}")
+
+    # --- Plot fitted vs actual ---
+    plt.figure(figsize=(12,5))
+    plt.plot(train, label='Actual', color='black', linewidth=2)
+    plt.plot(fitted_values, label='Fitted', color='red', linestyle='--')
+    plt.title('In-Sample Fitted vs Actual')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
 
     # --- Plot residual diagnostics ---
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))

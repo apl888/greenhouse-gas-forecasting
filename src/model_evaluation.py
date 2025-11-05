@@ -224,7 +224,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     if trim_first:
         fitted_values = fitted_values.iloc[1:]
         residuals = residuals.iloc[1:]
-        print('Note: First residual removed vefore plotting and diagnostics.\n')
+        print('Note: First residual removed before plotting and diagnostics.\n')
         
     # --- Compute in-sample accuracy metrics ---
     rmse = np.sqrt(mean_squared_error(train.iloc[-len(fitted_values):], fitted_values))

@@ -15,9 +15,11 @@ from scipy import stats
 import time
 
 # === 1. Model Validation via TimeSerisSplitCV ===
-def evaluate_models_tscv(models_list, data, n_splits=5, test_size=52, gap=13): # 3 month gap between train and validation sets to prevent leakage
-    '''Evaluate specified candidate models on validation sets'''
-
+def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52, gap=13): # 3 month gap between train and validation sets to prevent leakage
+    '''
+    Evaluate specified candidate SARIMA/SARIMAX models on time series CV folds.
+    Supports optional exogenous regressors (e.g., Fourier terms, weather, etc.).
+    '''
     start_time = time.perf_counter()
     
     tscv = TimeSeriesSplit(n_splits=n_splits, test_size=test_size, gap=gap)
@@ -28,7 +30,8 @@ def evaluate_models_tscv(models_list, data, n_splits=5, test_size=52, gap=13): #
     # Check split sizes
     for i, (train_idx, val_idx) in enumerate(tscv.split(data)):
         print(f'Fold {i+1}: Train={len(train_idx)} ({len(train_idx)/52:.1f} years), '
-              f'Val={len(val_idx)} ({len(val_idx)/52:.1f} years), 'f'Total={len(train_idx) + len(val_idx)}')
+              f'Val={len(val_idx)} ({len(val_idx)/52:.1f} years), '
+              f'Total={len(train_idx) + len(val_idx)}')
     print()
     
     results_summary = []
@@ -44,6 +47,13 @@ def evaluate_models_tscv(models_list, data, n_splits=5, test_size=52, gap=13): #
         for train_idx, val_idx in tscv.split(data):
             train_fold = data.iloc[train_idx]
             val_fold = data.iloc[val_idx]
+            
+            # --- slice exogenous terms ---
+            if exog is not None:
+                exog_train = exog.iloc[train_idx]
+                exog_val = exog.iloc[val_idx]
+            else:
+                exog_train = exog_val = None
             
             try:
                 # suppress parameter initialization warnings
@@ -61,16 +71,17 @@ def evaluate_models_tscv(models_list, data, n_splits=5, test_size=52, gap=13): #
              
                     model = SARIMAX(
                         train_fold, 
+                        exog=exog_train,
                         order=params['order'], 
-                        seasonal_order=params['seasonal_order']
+                        seasonal_order=params['seasonal_order'],
+                        enforce_stationarity=True,
+                        enforce_invertibility=True
                     )
     
                     results = model.fit(
                         disp=False, 
                         maxiter=2000,
-                        method='lbfgs',
-                        enforce_stationarity=True,
-                        enforce_invertibility=True
+                        method='lbfgs'
                     )
                 
                 # Check convergence

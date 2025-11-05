@@ -8,7 +8,8 @@ from tqdm import tqdm
 import warnings
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan, het_white
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan, het_white, normal_ad
+from statsmodels.stats.stattools import durbin_watson, jarque_bera
 from statsmodels.graphics.tsaplots import plot_acf
 from statsmodels.api import qqplot
 from scipy import stats
@@ -233,18 +234,19 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
                           train.iloc[-len(fitted_values):])) * 100
     r2 = r2_score(train.iloc[-len(fitted_values):], fitted_values)
 
-    print(f"\n--- In-Sample Accuracy ---")
-    print(f"RMSE: {rmse:.3f}")
-    print(f"MAE:  {mae:.3f}")
-    print(f"MAPE: {mape:.2f}%")
-    print(f"R²:   {r2:.3f}")
+    print(f'\n--- In-Sample Accuracy ---')
+    print(f'RMSE: {rmse:.3f}')
+    print(f'MAE:  {mae:.3f}')
+    print(f'MAPE: {mape:.2f}%')
+    print(f'R2:   {r2:.3f}')
 
     # --- Plot fitted vs actual ---
     plt.figure(figsize=(12,5))
     plt.plot(train, label='Actual', color='black', linewidth=2)
     plt.plot(fitted_values, label='Fitted', color='red', linestyle='--')
-    plt.title('In-Sample Fitted vs Actual')
-    plt.legend()
+    plt.title('In-Sample Fitted vs Actual', fontsize=14)
+    plt.ylabel('Concentration', fontsize=12)
+    plt.legend(fontsize=12)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
@@ -284,6 +286,18 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
 
     plt.tight_layout()
     plt.show()
+    
+    # --- Statistical diagnostic tests ---
+    print('\n--- Residual Diagnostic Tests ---')
+    
+    # Durbin-Watson 
+    dw_stat = durbin_watson(residuals)
+    print(f'Durbin-Watson statistic: {dw_stat:.3f} (~ 2 means no autocorrelation)')
+    
+    # Jarque-Bera
+    jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
+    print(f'Jarque-Bera test: JB={jb_stat:.2f}, p={jb_pvalue:.4f}')
+    print(f'  Skewness={skew:.3f}, kurtosis={kurtosis:.3f}')
 
     # Ljung-Box test
     lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
@@ -292,8 +306,12 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     print('H0: No autocorrelation up to specified lags')
     for lag in [1,5,10,52]:
         print(f"lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
-    
-    test_volatility_clustering(residuals)
+        
+    # Optional volatility clustering test
+    try:
+        test_volatility_clustering(residuals)
+    except NameError:
+        pass
     
     # Optional: heteroscedasticity tests
     if run_hetero:

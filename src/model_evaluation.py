@@ -293,7 +293,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     # Durbin-Watson 
     dw_stat = durbin_watson(residuals)
     print(f'Durbin-Watson statistic: {dw_stat:.3f}')
-    print('<2: positive autocorrelation \n~= 2: no autocorrelation \n>2: negative autocorrelation)')
+    print('<2: positive autocorrelation \n~= 2: no autocorrelation \n>2: negative autocorrelation\n')
     
     # Jarque-Bera
     jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)

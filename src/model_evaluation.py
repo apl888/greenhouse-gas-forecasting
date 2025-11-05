@@ -319,7 +319,9 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
         exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])  
         bp_p = het_breuschpagan(residuals, exog)[1]
         white_p = het_white(residuals, exog)[1]
-        print(f"\nBreusch-Pagan p = {bp_p:.4f}, White p = {white_p:.4f}")
+        print('\n--- Heteroscedasticity Tests ---')
+        print(f'Breusch-Pagan p = {bp_p:.4f}')
+        print(f'White p = {white_p:.4f}')
 
     return results
 

@@ -93,7 +93,7 @@ def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52,
                 successful_folds += 1
                 
                 # Forecast and calculate metrics
-                forecast = results.get_forecast(steps=len(val_fold))
+                forecast = results.get_forecast(steps=len(val_fold), exog=exog_val)
                 forecast_values = forecast.predicted_mean
                 
                 rmse = np.sqrt(mean_squared_error(val_fold, forecast_values))

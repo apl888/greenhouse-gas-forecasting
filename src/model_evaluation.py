@@ -343,7 +343,7 @@ def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, m
                     enforce_stationarity=True, 
                     enforce_invertibility=True, 
                     trend='c')
-    results = model.fit(method='powell', disp=False)
+    results = model.fit(method='lbfgs', disp=False)
     
     # Forecast on test set
     forecast = results.get_forecast(steps=len(test_data))

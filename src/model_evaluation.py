@@ -337,12 +337,36 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     return results
 
 # === 3. Out-of-sample residual diagnostics ===
-def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, model_name):
-    '''
+def out_of_sample_resid_analysis(train_data, 
+                                 test_data, 
+                                 order, 
+                                 seasonal_order, 
+                                 model_name,
+                                 run_hetero=False,
+                                 plot_forecast=True):
+   '''
     Complete residual diagnostics for test set
+    
+    Parameters
+    ----------
+    train_data     : pd.Series
+        Training dataset
+    test_data      : pd.Series  
+        Test dataset (typically 52 weeks)
+    order          : tuple
+        SARIMA (p,d,q) order
+    seasonal_order : tuple
+        SARIMA seasonal (P,D,Q,s) order  
+    model_name     : str
+        Name for labeling plots/results
+    run_hetero     : bool, default False
+        Whether to run heteroscedasticity tests
+    plot_forecast  : bool, default True
+        Whether to plot forecast vs actual comparison
     '''
     
     print(f'=== Out-of-Sample Residual Analysis: {model_name} ===')
+    print(f'Test set size: {len(test_data)} observations\n')
     
     # Fit model on training data
     model = SARIMAX(train_data,
@@ -353,64 +377,165 @@ def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, m
                     trend='c')
     results = model.fit(method='lbfgs', disp=False)
     
-    # Forecast on test set
-    forecast = results.get_forecast(steps=len(test_data))
-    predictions = forecast.predicted_mean
+    # get forecast with confidence intervals
+    forecast_obj = results.get_forecast(steps=len(test_data))
+    predictions = forecast_obj.predicted_mean
+    conf_int = forecast_obj.conf_int()
     
     # Calculate test residuals
     residuals = test_data - predictions
     
-    # 1. Basic residual statistics
-    print(f'Residual mean: {residuals.mean():.5f}, std: {residuals.std():.5f}')
-    print(f'Skew: {residuals.skew():.3f}, Kurtosis: {residuals.kurtosis():.3f}')
+    #--- accuracy metrics ---
+    rmse = np.sqrt(mean_squared_error(test_data, predictions))
+    mae = mean_absolute_error(test_data, predictions)
+    mape = np.mean(np.abs(residuals / test_data)) * 100
+    r2 = r2_score(test_data, predictions)
     
-    # 2. Normality tests
-    shapiro_p = stats.shapiro(residuals)[1]
-    print(f'Shapiro-Wilk normality test: p-value = {shapiro_p:.4f}')
+    print('--- Out-of-Sample Forecast Accuracy ---')
+    print(f'RMSE: {rmse:.3f}')
+    print(f'MAE:  {mae:.3f}') 
+    print(f'MAPE: {mape:.2f}%')
+    print(f'R²:   {r2:.3f}')   
     
-    # 3. Ljung-Box test for autocorrelation        
-    lb = acorr_ljungbox(residuals, lags=[1,4,13,26,52], return_df=True)
+    #--- forecast coverage (for uncertainty quantification) ---
+    coverage = np.mean((test_data >= conf_int.iloc[:,0]) & 
+                       (test_data <= conf_int.iloc[:,1]))
+    print(f'95% CI coverage: {coverage:.1%} (ideal: 95%)')
+    
+    # plot forecast vs actual
+    if plot_forecast:
+        plt.figure(figsize=(12,6))
+        plt.plot(test_data.index, test_data.values, label='Actual', marker='o', markerize=4)
+        plt.plot(predictions.index, predictions.values, label='Forecast', linestyle='--', linewidth=2)
+        plt.fill_between(conf_int.index, 
+                         conf_int.iloc[:,0], 
+                         conf_int.iloc[:,1],
+                         color='r',
+                         alpha=0.2,
+                         label='95% Confidence Interval')
+        plt.title(f'{model_name} - Out-of-Sample Forecast vs Actual', fontsize=14)
+        plt.ylabel('Concentration', fontsize=12)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+                         
+    #--- residual statistical analysis ---
+    print('\n--- Residual Statistical Properties ---')
+    print(f'Mean: {residuals.mean():.5f}')
+    print(f'Std:  {residuals.std():.5f}')
+    print(f'Skew: {residuals.skew():.3f}')
+    print(f'Kurtosis: {residuals.kurtosis():.3f}')
+    
+    # --- normality tests ---
+    shapiro_stat, shapiro_p = stats.shapiro(residuals)
+    jb_stat, jb_p, _, _ = jarque_bera(residuals)
+    
+    print('\n--- Normality Tests ---')
+    print(f'Shapiro-Wilk: p = {shapiro_p:.4f}')
+    print(f'Jarque-Bera:  p = {jb_p:.4f}')
+    
+    # --- autocorrelation analysis ---
+    lb = acorr_ljungbox(residuals, lags=[1, 4, 13, 26, 52], return_df=True)
+    
     print('\n--- Autocorrelation Diagnostics ---')
-    print('Ljung-Box Test')
-    print('H0: No autocorrelation up to specified lags')
-    for lag in [1,4,13,26,52]:
-        print(f'lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}')
+    print('Ljung-Box Test (H0: No autocorrelation)')
+    significant_lags = []
+    for lag in [1, 4, 13, 26, 52]:
+        p_val = lb.loc[lag, 'lb_pvalue']
+        significance = '***' if p_val < 0.05 else ''
+        if p_val < 0.05:
+            significant_lags.append(lag)
+        print(f'  Lag {lag:2d}: p = {p_val:.4f} {significance}')
     
-    # 4. Volatility clustering check (using existing function)
-    test_volatility_clustering(residuals, plot=False)
-    
-    # Plot residual diagnostics
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    if significant_lags:
+        print(f'\n"\u26A0"  Significant autocorrelation detected at lags: {significant_lags}')
+    else:
+        print('"\u2705" No significant autocorrelation detected')
         
-    # Residuals over time
+    # --- stationarity check on residuals ---
+    adf_stat, adf_p, _, _, _, _ = adfuller(residuals)
+    print(f'\n--- Stationarity Check ---')
+    print(f'ADF test on residuals: p = {adf_p:.4f}')
+    print('"\u2705" Residuals are stationary' if adf_p < 0.05 else '"\u26A0"  Residuals may not be stationary')
+    
+     # --- optional: heteroscedasticity tests ---
+    if run_hetero:
+        # Use time trend as exogenous variable for the test
+        exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])
+        bp_p = het_breuschpagan(residuals, exog)[1]
+        white_p = het_white(residuals, exog)[1]
+        
+        print('\n--- Heteroscedasticity Tests ---')
+        print(f'Breusch-Pagan: p = {bp_p:.4f}')
+        print(f'White test:    p = {white_p:.4f}')
+        print('"\u2705" Constant variance' if bp_p > 0.05 else '"\u26A0"  Possible heteroscedasticity')   
+    
+    # --- volatility clustering check ---
+    try:
+        test_volatility_clustering(residuals, plot=False)
+    except NameError:
+        print('\n"\u26A0"  Volatility clustering test function not available')
+    
+    # --- residual diagnostic plots ---
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(f'{model_name} - Out-of-Sample Residual Diagnostics', fontsize=16, y=1.02)
+        
+    # 1. residuals over time
     axes[0,0].plot(residuals.index, residuals.values)
     axes[0,0].axhline(y=0, color='r', linestyle='--')
-    axes[0,0].set_title(f'{model_name} - Prediction Test Residuals Over Time', fontsize=14)
-    axes[0,0].set_ylabel('Residual', fontsize=12)
-    axes[0,0].set_xlabel('Date', fontsize=12)
+    axes[0,0].fill_between(residuals.index, -2*residuals.std(), 2*residuals.std(), 
+                          alpha=0.2, color='gray', label='±2 sigma')
+    axes[0,0].set_title('Residuals Over Time', fontsize=14)
+    axes[0,0].set_ylabel('Residual Value', fontsize=12)
+    axes[0,0].legend()
+    axes[0,0].grid(True, alpha=0.3)
         
-    # Q-Q plot
+    # 2. Q-Q plot
     stats.probplot(residuals, dist='norm', plot=axes[0,1])
     axes[0,1].set_title('Q-Q Plot', fontsize=14)
     axes[0,1].set_xlabel('Theoretical Quantiles', fontsize=12)
     axes[0,1].set_ylabel('Sample Quantiles', fontsize=12)
+    axes[0,1].grid(True, alpha=0.3)
         
-    # Histogram
-    axes[1,0].hist(residuals, bins=25, density=True, alpha=0.7)
+    # 3. histogram
+    axes[1,0].hist(residuals, bins=min(20, len(residuals)//3), density=True, alpha=0.7)
+    
+    # Overlay normal distribution
+    xmin, xmax = axes[1,0].get_xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = stats.norm.pdf(x, residuals.mean(), residuals.std())
+    axes[1,0].plot(x, p, 'k', linewidth=2, label='Normal dist')
     axes[1,0].set_title('Residual Distribution', fontsize=14)
     axes[1,0].set_xlabel('Residual Value', fontsize=12)
     axes[1,0].set_ylabel('Density', fontsize=12)
+    axes[1,0].legend()
+    axes[1,0].grid(True, alpha=0.3)
         
     # ACF of residuals
-    plot_acf(residuals, lags=55, ax=axes[1,1])
+    plot_acf(residuals, lags=min(40, len(residuals)-1), ax=axes[1,1])
     axes[1,1].set_title('ACF of Residuals', fontsize=14)
     axes[1,1].set_ylabel('Autocorrelation', fontsize=12)
     axes[1,1].set_xlabel('Lag', fontsize=12)
+    axes[1,1].grid(True, alpha=0.3)
         
     plt.tight_layout()
     plt.show()
     
-    return residuals, results
+    # --- return comprehensive results ---
+    analysis_results = {
+        'residuals': residuals,
+        'predictions': predictions,
+        'confidence_intervals': conf_int,
+        'accuracy_metrics': {
+            'rmse': rmse, 'mae': mae, 'mape': mape, 'r2': r2, 'coverage': coverage
+        },
+        'normality_tests': {'shapiro_p': shapiro_p, 'jarque_bera_p': jb_p},
+        'autocorrelation_tests': lb,
+        'stationarity_test': adf_p
+    }
+    
+    return analysis_results, results
 
 # === 4. Summary assumption check ===
 def summarize_model_assumptions(residuals, alpha=0.05):

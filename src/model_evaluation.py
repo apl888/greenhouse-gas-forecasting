@@ -214,9 +214,14 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     '''
     
     # --- Fit model ---
-    model = SARIMAX(train, order=order, seasonal_order=seasonal_order,
-                    exog=exog, enforce_stationarity=True, enforce_invertibility=True, 
+    model = SARIMAX(train, 
+                    order=order, 
+                    seasonal_order=seasonal_order,
+                    exog=exog, 
+                    enforce_stationarity=True, 
+                    enforce_invertibility=True, 
                     trend='c')
+    
     results = model.fit(method='lbfgs', disp=False)
     fitted_values = results.fittedvalues
     residuals = results.resid
@@ -241,7 +246,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     print(f'R2:   {r2:.3f}')
 
     # --- Plot fitted vs actual ---
-    plt.figure(figsize=(12,5))
+    plt.figure(figsize=(12,4))
     plt.plot(train, label='Actual', color='black', linewidth=2)
     plt.plot(fitted_values, label='Fitted', color='red', linestyle='--')
     plt.title('In-Sample Fitted vs Actual', fontsize=14)
@@ -263,6 +268,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     # Histogram + KDE
     axes[0,1].hist(residuals, bins=30, density=True, alpha=0.8, label='Hist')
     residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
+    
     # Theoretical normal curve
     x_vals = np.linspace(residuals.min(), residuals.max(), 200)
     normal_pdf = stats.norm.pdf(x_vals, loc=residuals.mean(), scale=residuals.std())
@@ -291,9 +297,11 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     print('\n--- Residual Diagnostic Tests ---')
     
     # Durbin-Watson 
-    dw_stat = durbin_watson(residuals)
-    print(f'Durbin-Watson statistic: {dw_stat:.3f}')
-    print('\t< 2: positive autocorrelation \n\t~= 2: no autocorrelation \n\t> 2: negative autocorrelation\n')
+    # This is largely redundant with Ljung-Box test at lag 1 (see below).  
+    # I will leave the code here in commented-out form in case the test becomes desirable.  
+    # dw_stat = durbin_watson(residuals)
+    # print(f'Durbin-Watson statistic: {dw_stat:.3f}')
+    # print('\t< 2: positive autocorrelation \n\t~= 2: no autocorrelation \n\t> 2: negative autocorrelation\n')
     
     # Jarque-Bera
     jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
@@ -304,11 +312,11 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     print(f'\tkurtosis = {kurtosis:.3f}')
 
     # Ljung-Box test
-    lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
+    lb = acorr_ljungbox(residuals, lags=[1,4,13,26,52], return_df=True)
     print('\n--- Autocorrelation Diagnostics ---')
     print('Ljung-Box Test:')
     print('(H0: No autocorrelation up to specified lags)')
-    for lag in [1,5,10,52]:
+    for lag in [1,4,13,26,52]:
         print(f"\tlag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
         
     # Optional volatility clustering test
@@ -361,11 +369,11 @@ def out_of_sample_resid_analysis(train_data, test_data, order, seasonal_order, m
     print(f'Shapiro-Wilk normality test: p-value = {shapiro_p:.4f}')
     
     # 3. Ljung-Box test for autocorrelation        
-    lb = acorr_ljungbox(residuals, lags=[1,5,10,52], return_df=True)
+    lb = acorr_ljungbox(residuals, lags=[1,4,13,26,52], return_df=True)
     print('\n--- Autocorrelation Diagnostics ---')
     print('Ljung-Box Test')
     print('H0: No autocorrelation up to specified lags')
-    for lag in [1,5,10,52]:
+    for lag in [1,4,13,26,52]:
         print(f'lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}')
     
     # 4. Volatility clustering check (using existing function)
@@ -414,7 +422,7 @@ def summarize_model_assumptions(residuals, alpha=0.05):
     _, normality_p = stats.shapiro(residuals)
     
     # Autocorrelation test
-    lb = acorr_ljungbox(residuals, lags=[1, 5, 10, 52], return_df=True)
+    lb = acorr_ljungbox(residuals, lags=[1,4,13,26,52], return_df=True)
     no_autocorr = all(lb['lb_pvalue'] > alpha)
     
     assumptions = {

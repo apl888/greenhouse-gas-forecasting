@@ -41,7 +41,7 @@ def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52,
         rmse_scores, mae_scores = [], []
         aic_values, bic_values = [], []
         lb_pval_lag1, lb_pval_lag5, lb_pval_lag10, lb_pval_lag52  = [], [], [], []
-        seasonal_strengths = []
+        forecst_volatility = []
         
         successful_folds = 0
         
@@ -118,7 +118,7 @@ def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52,
                 
                 # Seasonal strength
                 if len(forecast_values) >= 52:
-                    seasonal_strengths.append(np.std(forecast_values))
+                    forecast_volatility.append(np.std(forecast_values))
                     
             except Exception as e:
                 print(f"Model {params['order']}, {params['seasonal_order']} failed on fold {successful_folds+1}: {e}")
@@ -138,7 +138,7 @@ def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52,
                 'MAE_mean': np.mean(mae_scores) if mae_scores else np.nan,
                 'AIC_mean': np.mean(aic_values) if aic_values else np.nan,
                 'BIC_mean': np.mean(bic_values) if bic_values else np.nan,
-                'Seasonal_Strength': np.mean(seasonal_strengths) if seasonal_strengths else 0,
+                'forecast_volatility': np.mean(forecast_volatility) if forecast_volatility else 0,
                 'LB_lag1_pval_mean': np.mean(lb_pval_lag1) if lb_pval_lag1 else np.nan,
                 'LB_lag5_pval_mean': np.mean(lb_pval_lag5) if lb_pval_lag5 else np.nan,
                 'LB_lag10_pval_mean': np.mean(lb_pval_lag10) if lb_pval_lag10 else np.nan,

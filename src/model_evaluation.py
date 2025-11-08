@@ -345,7 +345,7 @@ def out_of_sample_resid_analysis(train_data,
                                  model_name,
                                  run_hetero=False,
                                  plot_forecast=True):
-   '''
+    '''
     Complete residual diagnostics for test set
     
     Parameters

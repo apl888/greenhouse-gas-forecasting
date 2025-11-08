@@ -294,7 +294,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     plt.show()
     
     # --- Statistical diagnostic tests ---
-    print('\n--- Residual Diagnostic Tests ---')
+    print('\n=== Residual Diagnostic Tests ===')
     
     # Durbin-Watson 
     # This is largely redundant with Ljung-Box test at lag 1 (see below).  
@@ -305,6 +305,7 @@ def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero
     
     # Jarque-Bera
     jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
+    print('\n--- Distribution Diagnostics ---')
     print('Jarque-Bera test:')
     print(f'\tJB = {jb_stat:.2f}')
     print(f'\tp = {jb_pvalue:.4f}')

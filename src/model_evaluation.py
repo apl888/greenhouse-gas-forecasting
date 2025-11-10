@@ -41,7 +41,7 @@ def evaluate_models_tscv(models_list, data, exog=None, n_splits=5, test_size=52,
         rmse_scores, mae_scores = [], []
         aic_values, bic_values = [], []
         lb_pval_lag1, lb_pval_lag5, lb_pval_lag10, lb_pval_lag52  = [], [], [], []
-        forecst_volatility = []
+        forecast_volatility = []
         
         successful_folds = 0
         

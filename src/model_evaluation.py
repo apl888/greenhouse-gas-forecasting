@@ -412,7 +412,7 @@ def out_of_sample_resid_analysis(train_data,
     # plot forecast vs actual
     if plot_forecast:
         plt.figure(figsize=(12,6))
-        plt.plot(test_data.index, test_data.values, label='Actual', marker='o', markerize=4)
+        plt.plot(test_data.index, test_data.values, label='Actual', marker='o', markersize=4)
         plt.plot(predictions.index, predictions.values, label='Forecast', linestyle='--', linewidth=2)
         plt.fill_between(conf_int.index, 
                          conf_int.iloc[:,0], 

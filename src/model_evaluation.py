@@ -343,6 +343,8 @@ def out_of_sample_resid_analysis(train_data,
                                  order, 
                                  seasonal_order, 
                                  model_name,
+                                 exog_train=None,
+                                 exog_test=None,
                                  run_hetero=False,
                                  plot_forecast=True):
     '''
@@ -373,13 +375,17 @@ def out_of_sample_resid_analysis(train_data,
     model = SARIMAX(train_data,
                     order=order,
                     seasonal_order=seasonal_order,
+                    exog=exog_train if exog_train is not None else None,
                     enforce_stationarity=True, 
                     enforce_invertibility=True, 
                     trend='c')
     results = model.fit(method='lbfgs', disp=False)
     
     # get forecast with confidence intervals
-    forecast_obj = results.get_forecast(steps=len(test_data))
+    forecast_obj = results.get_forecast(
+        steps=len(test_data),
+        exog=exog_test if exog_test is not None else None
+        )
     predictions = forecast_obj.predicted_mean
     conf_int = forecast_obj.conf_int()
     

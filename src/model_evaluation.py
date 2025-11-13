@@ -443,7 +443,9 @@ def out_of_sample_resid_analysis(train_data,
     print(f'Jarque-Bera:  p = {jb_p:.4f}')
     
     # --- autocorrelation analysis ---
-    lb = acorr_ljungbox(residuals, lags=[1, 4, 13, 26, 52], return_df=True)
+    max_lag = min(52, len(residuals) - 2)
+    lags = [lag for lag in [1, 4, 13, 26, 52] if lag <= max_lag]
+    lb = acorr_ljungbox(residuals, lags=lags, return_df=True)
     
     print('\n--- Autocorrelation Diagnostics ---')
     print('Ljung-Box Test (H0: No autocorrelation)')

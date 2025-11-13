@@ -10,6 +10,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan, het_white, normal_ad
 from statsmodels.stats.stattools import durbin_watson, jarque_bera
+from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf
 from statsmodels.api import qqplot
 from scipy import stats

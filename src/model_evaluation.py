@@ -450,7 +450,7 @@ def out_of_sample_resid_analysis(train_data,
     print('\n--- Autocorrelation Diagnostics ---')
     print('Ljung-Box Test (H0: No autocorrelation)')
     significant_lags = []
-    for lag in [1, 4, 13, 26, 52]:
+    for lag in lags:
         p_val = lb.loc[lag, 'lb_pvalue']
         significance = '***' if p_val < 0.05 else ''
         if p_val < 0.05:

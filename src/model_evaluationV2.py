@@ -29,144 +29,137 @@ def evaluate_models_tscv(
     Supports optional exogenous regressors (e.g., Fourier terms, weather, etc.).
     '''
     start_time = time.perf_counter()
-
+    
     tscv = TimeSeriesSplit(n_splits=n_splits, test_size=test_size, gap=gap)
+    
+    print(f'Evaluating {len(models_list)} models with {n_splits} folds each')
+    print(f'Total iterations: {len(models_list) * n_splits}\n')
 
-    print(f"Evaluating {len(models_list)} models with {n_splits} folds each")
-    print(f"Total iterations: {len(models_list) * n_splits}\n")
-
-    # preview fold sizes
+    # Check split sizes
     for i, (train_idx, val_idx) in enumerate(tscv.split(data)):
-        print(f"Fold {i+1}: Train={len(train_idx)}, Val={len(val_idx)}")
-        
+        print(f'Fold {i+1}: Train={len(train_idx)} ({len(train_idx)/52:.1f} years), '
+              f'Val={len(val_idx)} ({len(val_idx)/52:.1f} years), '
+              f'Total={len(train_idx) + len(val_idx)}')
     print()
     results_summary = []
-
+    
     for params in tqdm(models_list, desc='Models'):
         rmse_scores, mae_scores = [], []
         aic_values, bic_values = [], []
-        lb_pval_lag1, lb_pval_lag5, lb_pval_lag10, lb_pval_lag52 = [], [], [], []
+        lb_pval_lag1, lb_pval_lag5, lb_pval_lag10, lb_pval_lag52  = [], [], [], []
         forecast_volatility = []
-
+        
         successful_folds = 0
-
-        for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(data)):
-
+        
+        for train_idx, val_idx in tscv.split(data):
             train_fold = data.iloc[train_idx]
             val_fold = data.iloc[val_idx]
-
-            # --- Handle exogenous regressors ---
+            
+            # --- slice exogenous terms ---
             if exog is not None:
                 exog_train = exog.iloc[train_idx]
-                exog_val   = exog.iloc[val_idx]
+                exog_val = exog.iloc[val_idx]
             else:
                 exog_train = exog_val = None
-
-            # Must have at least 52 future points
-            if len(val_fold) < test_size:
-                continue
-
-            # Restrict validation to first 52-step horizon
-            val_target = val_fold.iloc[:test_size]
-            if exog_val is not None:
-                exog_val_h = exog_val.iloc[:test_size]
-            else:exog_val_h = None
-
+            
             try:
-                # Build model
+                # suppress parameter initialization warnings
                 with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore",
-                        message="Non-invertible starting")
-                    warnings.filterwarnings("ignore",
-                        message="Non-stationary starting")
-                    warnings.filterwarnings("ignore",
-                        message="Too few observations")
+                    warnings.filterwarnings("ignore", 
+                        message="Non-stationary starting autoregressive parameters")
+                    warnings.filterwarnings("ignore", 
+                        message="Non-invertible starting MA parameters")
+                    warnings.filterwarnings("ignore", 
+                        message="Non-invertible starting seasonal moving average")
+                    warnings.filterwarnings("ignore", 
+                        message="Too few observations to estimate starting parameters")
+                    # keep convergence warnings visible
                     warnings.filterwarnings("always", category=ConvergenceWarning)
-
+             
                     model = SARIMAX(
-                        train_fold,
+                        train_fold, 
                         exog=exog_train,
-                        order=params["order"],
-                        seasonal_order=params["seasonal_order"],
+                        order=params['order'], 
+                        seasonal_order=params['seasonal_order'],
                         enforce_stationarity=True,
                         enforce_invertibility=True
                     )
-
+    
                     results = model.fit(
-                        disp=False,
+                        disp=False, 
                         maxiter=2000,
                         method='lbfgs'
                     )
-
-                converged = results.mle_retvals.get("converged", False)
+                
+                # Check convergence
+                converged = results.mle_retvals.get('converged', False)
                 if not converged:
-                    print(f"Model {params['order'], params['seasonal_order']} "
-                          f"did not converge on fold {fold_idx+1}")
-                    continue
-
+                    print(f"Model {params['order']}, {params['seasonal_order']} did not converge on fold {successful_folds+1}")
+                    continue # skip non-coverged folds
+                
                 successful_folds += 1
-
-                # --- True 52-step ahead forecast ---
-                forecast = results.get_forecast(steps=test_size, exog=exog_val_h)
+                
+                # Forecast and calculate metrics
+                forecast = results.get_forecast(steps=len(val_fold), exog=exog_val)
                 forecast_values = forecast.predicted_mean
+                
+                rmse = np.sqrt(mean_squared_error(val_fold, forecast_values))
+                mae = mean_absolute_error(val_fold, forecast_values)
 
-                # --- Accuracy ---
-                rmse = np.sqrt(mean_squared_error(val_target, forecast_values))
-                mae  = mean_absolute_error(val_target, forecast_values)
-
+                # Ljung-Box test with safety check
+                if len(results.resid) >= 52:
+                    try:
+                        lb_test_comprehensive = acorr_ljungbox(results.resid, lags=[1,5,10,52], return_df=True)
+                        lb_pval_lag1.append(lb_test_comprehensive.loc[1, 'lb_pvalue'])
+                        lb_pval_lag5.append(lb_test_comprehensive.loc[5, 'lb_pvalue'])
+                        lb_pval_lag10.append(lb_test_comprehensive.loc[10, 'lb_pvalue'])
+                        lb_pval_lag52.append(lb_test_comprehensive.loc[52, 'lb_pvalue'])
+                    except Exception as lb_error:
+                        print(f'Ljung-Box test failed on fold {fold_index+1}: {lb_error}')
+                
                 rmse_scores.append(rmse)
                 mae_scores.append(mae)
                 aic_values.append(results.aic)
                 bic_values.append(results.bic)
-
-                # --- Residual diagnostics ---
-                resid = results.resid
-                if len(resid) >= 52:
-                    try:
-                        lb = acorr_ljungbox(resid,
-                                            lags=[1, 5, 10, 52],
-                                            return_df=True)
-                        lb_pval_lag1.append(lb.loc[1,  'lb_pvalue'])
-                        lb_pval_lag5.append(lb.loc[5,  'lb_pvalue'])
-                        lb_pval_lag10.append(lb.loc[10, 'lb_pvalue'])
-                        lb_pval_lag52.append(lb.loc[52, 'lb_pvalue'])
-                    except Exception as e:
-                        print(f"Ljung-Box failed on fold {fold_idx+1}: {e}")
-
-                # approx seasonal "volatility"
-                forecast_volatility.append(np.std(forecast_values))
-
+                
+                # Seasonal strength
+                if len(forecast_values) >= 52:
+                    forecast_volatility.append(np.std(forecast_values))
+                    
             except Exception as e:
-                print(f"Model {params['order'], params['seasonal_order']} "
-                      f"failed on fold {fold_idx+1}: {e}")
+                print(f"Model {params['order']}, {params['seasonal_order']} failed on fold {successful_folds+1}: {e}")
                 continue
-
-        # require at least 3 converged folds
-        if successful_folds >= 3:
-
+        
+        # Only include models with sufficient successful folds
+        if successful_folds >= 3:  # At least 3/5 folds converged
+            convergence_rate = successful_folds / n_splits
+            
             results_summary.append({
                 'order': params['order'],
                 'seasonal_order': params['seasonal_order'],
                 'successful_folds': successful_folds,
-                'convergence_rate': successful_folds / n_splits,
-                'RMSE_mean': np.mean(rmse_scores),
-                'RMSE_std': np.std(rmse_scores),
-                'MAE_mean': np.mean(mae_scores),
-                'AIC_mean': np.mean(aic_values),
-                'BIC_mean': np.mean(bic_values),
-                'forecast_volatility': np.mean(forecast_volatility),
+                'convergence_rate': convergence_rate,
+                'RMSE_mean': np.mean(rmse_scores) if rmse_scores else np.nan,
+                'RMSE_std': np.std(rmse_scores) if rmse_scores else np.nan,
+                'MAE_mean': np.mean(mae_scores) if mae_scores else np.nan,
+                'AIC_mean': np.mean(aic_values) if aic_values else np.nan,
+                'BIC_mean': np.mean(bic_values) if bic_values else np.nan,
+                'forecast_volatility': np.mean(forecast_volatility) if forecast_volatility else 0,
                 'LB_lag1_pval_mean': np.mean(lb_pval_lag1) if lb_pval_lag1 else np.nan,
                 'LB_lag5_pval_mean': np.mean(lb_pval_lag5) if lb_pval_lag5 else np.nan,
                 'LB_lag10_pval_mean': np.mean(lb_pval_lag10) if lb_pval_lag10 else np.nan,
                 'LB_lag52_pval_mean': np.mean(lb_pval_lag52) if lb_pval_lag52 else np.nan
             })
 
-    total_time = time.perf_counter() - start_time
-    print(f"\nTotal duration: {total_time/60:.2f} minutes")
-    print(f"Average per model: {(total_time/60)/len(models_list):.2f} minutes")
 
+    # get the total duration and duration per model
+    end_time = time.perf_counter()     
+    total_duration = end_time - start_time
+
+    print(f'\nTotal duration: {total_duration / 60:.2f} minutes')
+    print(f'Average duration per model: {(total_duration / 60) / len(models_list):.2f} minutes')
     print(f"\nNumber of models successfully evaluated: {len(results_summary)}")
-
+        
     return pd.DataFrame(results_summary)
 
 # === 1. Volatility / ARCH Check ===

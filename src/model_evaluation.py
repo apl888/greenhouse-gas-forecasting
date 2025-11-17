@@ -119,19 +119,31 @@ def evaluate_models_tscv(
                 aic_values.append(results.aic)
                 bic_values.append(results.bic)
 
-                # --- Residual diagnostics ---
-                resid = results.resid
-                if len(resid) >= 52:
-                    try:
+                # --- Residual diagnostics (filtered one-step-ahead) ---
+                try:
+                    pred = results.get_prediction(
+                        start=train_fold.index[0],
+                        end=train_fold.index[-1],
+                        exog=exog_train,
+                        dynamic=False
+                    )
+                    filt_mean = pred.predicted_mean
+
+                    resid = train_fold.loc[filt_mean.index] - filt_mean
+                    resid = resid.iloc[1:]   # drop first filtered residual
+
+                    if len(resid) >= 52:
                         lb = acorr_ljungbox(resid,
                                             lags=[1, 5, 10, 52],
                                             return_df=True)
+
                         lb_pval_lag1.append(lb.loc[1,  'lb_pvalue'])
                         lb_pval_lag5.append(lb.loc[5,  'lb_pvalue'])
                         lb_pval_lag10.append(lb.loc[10, 'lb_pvalue'])
                         lb_pval_lag52.append(lb.loc[52, 'lb_pvalue'])
-                    except Exception as e:
-                        print(f"Ljung-Box failed on fold {fold_idx+1}: {e}")
+
+                except Exception as e:
+                    print(f"Ljung-Box failed on fold {fold_idx+1}: {e}")
 
                 # approx seasonal "volatility"
                 forecast_volatility.append(np.std(forecast_values))

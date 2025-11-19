@@ -133,7 +133,7 @@ def evaluate_models_tscv(
                     filt_mean = pred.predicted_mean
 
                     resid = train_fold.loc[filt_mean.index] - filt_mean
-                    resid = resid.iloc[1:]   # drop first filtered residual
+                    resid = resid.iloc[1:]   # drop first filtered residual to avoid likely warm-up artifact
 
                     if len(resid) >= 52:
                         lb = acorr_ljungbox(resid,

@@ -221,7 +221,12 @@ def test_volatility_clustering(residuals, plot=False):
     return arch_test
 
 # === 2. In-sample residual diagnostics ===
-def in_sample_resid_analysis(train, order, seasonal_order, exog=None, run_hetero=False, trim_first=False):
+def in_sample_resid_analysis(train, 
+                             order, 
+                             seasonal_order, 
+                             exog=None, 
+                             run_hetero=False, 
+                             trim_first=False):
     '''
     Fit a SARIMA model and run in-sample diagnostics.
     

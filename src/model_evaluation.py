@@ -3,7 +3,6 @@
 
 # change enforce_stationarity and enforc_invertibility to 'False' to possibly better handle
 # model warm-up issues.  
-# change method from 'lbfgs' to 'innovations_mle' to also help with model warm-up
 
 # src/model_evaluation.py
 import numpy as np
@@ -32,7 +31,7 @@ def evaluate_models_tscv(
     test_size=52, 
     gap=13,        # 3 month gap between train and validation sets to prevent leakage
     burn_in_period=52,
-    estimation_method='innovations_mle',
+    estimation_method='lbfgs',
     enforce_stationarity=False,
     enforce_invertibility=False): 
     '''
@@ -45,7 +44,7 @@ def evaluate_models_tscv(
     burn_in_period : int, default=52
         Fixed number of initial residuals to exclude from diagnostics
         (prevents data-dependent decisions)
-    estimation_method : str, default='innovations_mle'
+    estimation_method : str, default='lbfgs'
         Better handling of initial values and warm-up period
     '''
     start_time = time.perf_counter()
@@ -245,7 +244,7 @@ def in_sample_resid_analysis(train,
                              exog=None, 
                              run_hetero=False, 
                              burn_in_period=52,       # changed from trim_first to fixed burn-in
-                             estimation_method='innovations_mle',
+                             estimation_method='lbfgs',
                              enforce_stationarity=False, 
                              enforce_invertibility=False):
     '''
@@ -265,7 +264,7 @@ def in_sample_resid_analysis(train,
         If True, runs Breusch-Pagan and White tests for heteroscedasticity.
     burn_in_period : int, default=52
         Fixed number of initial residuals to exclude (prevents data leakage)
-    estimation_method : str, default='innovations_mle'
+    estimation_method : str, default='lbfgs'
         Better handling of initial values
     '''
     
@@ -422,7 +421,7 @@ def out_of_sample_resid_analysis(train_data,
                                  exog_test=None,
                                  run_hetero=False,
                                  plot_forecast=True,
-                                 estimation_method='innovations_mle',  
+                                 estimation_method='lbfgs',  
                                  enforce_stationarity=False,           
                                  enforce_invertibility=False):        
     '''

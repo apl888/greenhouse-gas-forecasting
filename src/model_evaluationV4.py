@@ -1,10 +1,6 @@
 # This edit adds one-step-ahead prediction in the evaluate_models_tscv function
 # lines 123-133
 
-# change enforce_stationarity and enforc_invertibility to 'False' to possibly better handle
-# model warm-up issues.  
-# change method from 'lbfgs' to 'innovations_mle' to also help with model warm-up
-
 # src/model_evaluation.py
 import numpy as np
 import pandas as pd
@@ -30,24 +26,10 @@ def evaluate_models_tscv(
     exog=None, 
     n_splits=5, 
     test_size=52, 
-    gap=13,        # 3 month gap between train and validation sets to prevent leakage
-    burn_in_period=52,
-    estimation_method='innovations_mle',
-    enforce_stationarity=False,
-    enforce_invertibility=False
-    ): 
+    gap=13): # 3 month gap between train and validation sets to prevent leakage
     '''
     Evaluate specified candidate SARIMA/SARIMAX models on time series CV folds.
     Supports optional exogenous regressors (e.g., Fourier terms, weather, etc.).
-    
-        
-    Parameters
-    ----------
-    burn_in_period : int, default=52
-        Fixed number of initial residuals to exclude from diagnostics
-        (prevents data-dependent decisions)
-    estimation_method : str, default='innovations_mle'
-        Better handling of initial values and warm-up period
     '''
     start_time = time.perf_counter()
 
@@ -109,14 +91,14 @@ def evaluate_models_tscv(
                         exog=exog_train,
                         order=params["order"],
                         seasonal_order=params["seasonal_order"],
-                        enforce_stationarity=enforce_stationarity,
-                        enforce_invertibility=enforce_invertibility
+                        enforce_stationarity=True,
+                        enforce_invertibility=True
                     )
 
                     results = model.fit(
                         disp=False,
                         maxiter=2000,
-                        method=estimation_method
+                        method='lbfgs'
                     )
 
                 converged = results.mle_retvals.get("converged", False)
@@ -149,20 +131,19 @@ def evaluate_models_tscv(
                         dynamic=False
                     )
                     filt_mean = pred.predicted_mean
+
                     resid = train_fold.loc[filt_mean.index] - filt_mean
+                    resid = resid.iloc[1:]   # drop first filtered residual to avoid likely warm-up artifact
 
-                    if len(resid) > burn_in_period:
-                        stable_resid = resid.iloc[burn_in_period:]
-                        
-                        if len(stable_resid) >= 52:
-                            lb = acorr_ljungbox(stable_resid,
-                                                lags=[1, 5, 10, 52],
-                                                return_df=True)
+                    if len(resid) >= 52:
+                        lb = acorr_ljungbox(resid,
+                                            lags=[1, 5, 10, 52],
+                                            return_df=True)
 
-                            lb_pval_lag1.append(lb.loc[1,  'lb_pvalue'])
-                            lb_pval_lag5.append(lb.loc[5,  'lb_pvalue'])
-                            lb_pval_lag10.append(lb.loc[10, 'lb_pvalue'])
-                            lb_pval_lag52.append(lb.loc[52, 'lb_pvalue'])
+                        lb_pval_lag1.append(lb.loc[1,  'lb_pvalue'])
+                        lb_pval_lag5.append(lb.loc[5,  'lb_pvalue'])
+                        lb_pval_lag10.append(lb.loc[10, 'lb_pvalue'])
+                        lb_pval_lag52.append(lb.loc[52, 'lb_pvalue'])
 
                 except Exception as e:
                     print(f"Ljung-Box failed on fold {fold_idx+1}: {e}")
@@ -245,10 +226,7 @@ def in_sample_resid_analysis(train,
                              seasonal_order, 
                              exog=None, 
                              run_hetero=False, 
-                             burn_in_period=52,       # changed from trim_first to fixed burn-in
-                             estimation_method='innovations_mle',
-                             enforce_stationarity=False, 
-                             enforce_invertibility=False):
+                             trim_first=False):
     '''
     Fit a SARIMA model and run in-sample diagnostics.
     
@@ -266,10 +244,6 @@ def in_sample_resid_analysis(train,
         If True, runs Breusch-Pagan and White tests for heteroscedasticity.
     trim_first     : bool, default False
         If True, drops the first residual before diagnostic plots and tests.
-    burn_in_period : int, default=52
-        Fixed number of initial residuals to exclude (prevents data leakage)
-    estimation_method : str, default='innovations_mle'
-        Better handling of initial values
     '''
     
     # --- Fit model ---
@@ -277,63 +251,44 @@ def in_sample_resid_analysis(train,
                     order=order, 
                     seasonal_order=seasonal_order,
                     exog=exog, 
-                    enforce_stationarity=enforce_stationarity, 
-                    enforce_invertibility=enforce_invertibility, 
+                    enforce_stationarity=True, 
+                    enforce_invertibility=True, 
                     trend='c')
     
-    results = model.fit(method=estimation_method, disp=False)
-
-    # use all residuals for model fitting assessment
-    all_residuals = results.resid
-    all_fitted = results.fittedvalues 
+    results = model.fit(method='lbfgs', disp=False)
+    fitted_values = results.fittedvalues
+    residuals = results.resid
     
-    # use stable residuals for diagnostics
-    if len(all_residuals) > burn_in_period:
-        stable_residuals = all_residuals.iloc[burn_in_period:]
-        stable_fitted = all_fitted.iloc[burn_in_period:]
-        stable_train = train.iloc[burn_in_period:]
-    else:
-        stable_residuals = all_residuals
-        stable_fitted = all_fitted
-        stable_train = train
+    # optionally trim the first residual (if it is a model warm-up artifact)
+    if trim_first:
+        fitted_values = fitted_values.iloc[1:]
+        residuals = residuals.iloc[1:]
+        print('Note: First residual removed before plotting and diagnostics.\n')
         
-    print(f'Using {len(stable_residuals)} residuals for diagnostics '
-          f'(first {burn_in_period} excluded as burn_in)')
-        
-    # --- Compute in-sample accuracy on stable period ---
-    rmse = np.sqrt(mean_squared_error(stable_train, stable_fitted))
-    mae = mean_absolute_error(stable_train, stable_fitted)
-    mape = np.mean(np.abs((stable_train - stable_fitted) / stable_train)) * 100
-    r2 = r2_score(stable_train, stable_fitted)
+    # --- Compute in-sample accuracy metrics ---
+    rmse = np.sqrt(mean_squared_error(train.iloc[-len(fitted_values):], fitted_values))
+    mae = mean_absolute_error(train.iloc[-len(fitted_values):], fitted_values)
+    mape = np.mean(np.abs((train.iloc[-len(fitted_values):] - fitted_values) / 
+                          train.iloc[-len(fitted_values):])) * 100
+    r2 = r2_score(train.iloc[-len(fitted_values):], fitted_values)
 
-    print(f'\n--- In-Sample Accuracy (after burn-in) ---')
+    print(f'\n--- In-Sample Accuracy ---')
     print(f'RMSE: {rmse:.3f}')
     print(f'MAE:  {mae:.3f}')
     print(f'MAPE: {mape:.2f}%')
     print(f'R2:   {r2:.3f}')
 
-    # --- Plot both full and stable periods ---
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-    
-    # Full series
-    ax1.plot(train, label='Actual', color='black', linewidth=2)
-    ax1.plot(all_fitted, label='Fitted', color='red', linestyle='--', alpha=0.7)
-    ax1.axvline(stable_train.index[0], color='blue', linestyle=':', 
-                label=f'Burn-in end ({burn_in_period} points)')
-    ax1.set_title('Full In-Sample Fitted vs Actual', fontsize=14)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Stable period only
-    ax2.plot(stable_train, label='Actual', color='black', linewidth=2)
-    ax2.plot(stable_fitted, label='Fitted', color='red', linestyle='--')
-    ax2.set_title('Stable Period (After Burn-in)', fontsize=14)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
+    # --- Plot fitted vs actual ---
+    plt.figure(figsize=(12,4))
+    plt.plot(train, label='Actual', color='black', linewidth=2)
+    plt.plot(fitted_values, label='Fitted', color='red', linestyle='--')
+    plt.title('In-Sample Fitted vs Actual', fontsize=14)
+    plt.ylabel('Concentration', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
-    
+
     # --- Plot residual diagnostics ---
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     
@@ -391,7 +346,7 @@ def in_sample_resid_analysis(train,
     print(f'\tkurtosis = {kurtosis:.3f}')
 
     # Ljung-Box test
-    lb = acorr_ljungbox(stable_residuals, lags=[1,4,13,26,52], return_df=True)
+    lb = acorr_ljungbox(residuals, lags=[1,4,13,26,52], return_df=True)
     print('\n--- Autocorrelation Diagnostics ---')
     print('Ljung-Box Test:')
     print('(H0: No autocorrelation up to specified lags)')
@@ -413,7 +368,7 @@ def in_sample_resid_analysis(train,
         print(f'Breusch-Pagan: p = {bp_p:.4f}')
         print(f'White: p = {white_p:.4f}')
 
-    return results, stable_residuals
+    return results
 
 # === 3. Out-of-sample residual diagnostics ===
 def out_of_sample_resid_analysis(train_data, 
@@ -424,10 +379,7 @@ def out_of_sample_resid_analysis(train_data,
                                  exog_train=None,
                                  exog_test=None,
                                  run_hetero=False,
-                                 plot_forecast=True,
-                                 estimation_method='innovations_mle',  
-                                 enforce_stationarity=False,           
-                                 enforce_invertibility=False):        
+                                 plot_forecast=True):
     '''
     Complete residual diagnostics for test set
     
@@ -450,7 +402,6 @@ def out_of_sample_resid_analysis(train_data,
     '''
     
     print(f'=== Out-of-Sample Residual Analysis: {model_name} ===')
-    print(f'Using estimation method: {estimation_method}')
     print(f'Test set size: {len(test_data)} observations\n')
     
     # Fit model on training data
@@ -458,10 +409,10 @@ def out_of_sample_resid_analysis(train_data,
                     order=order,
                     seasonal_order=seasonal_order,
                     exog=exog_train if exog_train is not None else None,
-                    enforce_stationarity=enforce_stationarity, 
-                    enforce_invertibility=enforce_invertibility, 
+                    enforce_stationarity=True, 
+                    enforce_invertibility=True, 
                     trend='c')
-    results = model.fit(method=estimation_method, disp=False)
+    results = model.fit(method='lbfgs', disp=False)
     
     # get forecast with confidence intervals
     forecast_obj = results.get_forecast(

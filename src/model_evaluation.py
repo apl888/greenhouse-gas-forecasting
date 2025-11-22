@@ -34,8 +34,7 @@ def evaluate_models_tscv(
     burn_in_period=52,
     estimation_method='innovations_mle',
     enforce_stationarity=False,
-    enforce_invertibility=False
-    ): 
+    enforce_invertibility=False): 
     '''
     Evaluate specified candidate SARIMA/SARIMAX models on time series CV folds.
     Supports optional exogenous regressors (e.g., Fourier terms, weather, etc.).
@@ -346,8 +345,8 @@ def in_sample_resid_analysis(train,
     stable_residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
     
     # Theoretical normal curve
-    x_vals = np.linspace(residuals.min(), residuals.max(), 200)
-    normal_pdf = stats.norm.pdf(x_vals, loc=residuals.mean(), scale=residuals.std())
+    x_vals = np.linspace(stable_residuals.min(), stable_residuals.max(), 200)
+    normal_pdf = stats.norm.pdf(x_vals, loc=stable_residuals.mean(), scale=stable_residuals.std())
     axes[0,1].plot(x_vals, normal_pdf, color='r', linestyle='--', label='Normal PDF')
     axes[0,1].set_title('Residual Distribution', fontsize=14)
     axes[0,1].set_xlabel('Residual Value', fontsize=12)
@@ -380,7 +379,7 @@ def in_sample_resid_analysis(train,
     # print('\t< 2: positive autocorrelation \n\t~= 2: no autocorrelation \n\t> 2: negative autocorrelation\n')
     
     # Jarque-Bera
-    jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(residuals)
+    jb_stat, jb_pvalue, skew, kurtosis = jarque_bera(stable_residuals)
     print('\n--- Distribution Diagnostics ---')
     print('Jarque-Bera test:')
     print(f'\tJB = {jb_stat:.2f}')
@@ -551,9 +550,9 @@ def out_of_sample_resid_analysis(train_data,
      # --- optional: heteroscedasticity tests ---
     if run_hetero:
         # Use time trend as exogenous variable for the test
-        exog = np.column_stack([np.ones(len(stable_residuals)), np.arange(len(stable_residuals))])
-        bp_p = het_breuschpagan(stable_residuals, exog)[1]
-        white_p = het_white(stable_residuals, exog)[1]
+        exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])
+        bp_p = het_breuschpagan(residuals, exog)[1]
+        white_p = het_white(residuals, exog)[1]
         
         print('\n--- Heteroscedasticity Tests ---')
         print(f'Breusch-Pagan: p = {bp_p:.4f}')

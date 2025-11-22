@@ -264,8 +264,6 @@ def in_sample_resid_analysis(train,
         Exogenous variables for SARIMAX (must align with 'train' index)
     run_hetero     : bool, default False
         If True, runs Breusch-Pagan and White tests for heteroscedasticity.
-    trim_first     : bool, default False
-        If True, drops the first residual before diagnostic plots and tests.
     burn_in_period : int, default=52
         Fixed number of initial residuals to exclude (prevents data leakage)
     estimation_method : str, default='innovations_mle'
@@ -338,14 +336,14 @@ def in_sample_resid_analysis(train,
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     
     # Residual time series
-    axes[0,0].plot(residuals)
+    axes[0,0].plot(stable_residuals)
     axes[0,0].set_title('Residuals over Time')
     axes[0,0].set_xlabel('Time Index')
     axes[0,0].set_ylabel('Residual Value')
 
     # Histogram + KDE
-    axes[0,1].hist(residuals, bins=30, density=True, alpha=0.8, label='Hist')
-    residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
+    axes[0,1].hist(stable_residuals, bins=30, density=True, alpha=0.8, label='Hist')
+    stable_residuals.plot(kind='kde', ax=axes[0,1], linewidth=2, alpha=0.6, label='KDE')
     
     # Theoretical normal curve
     x_vals = np.linspace(residuals.min(), residuals.max(), 200)
@@ -357,13 +355,13 @@ def in_sample_resid_analysis(train,
     axes[0,1].legend()
 
     # Q-Q plot
-    qqplot(residuals, line='s', ax=axes[1,0])
+    qqplot(stable_residuals, line='s', ax=axes[1,0])
     axes[1,0].set_title('Q-Q Plot', fontsize=14)
     axes[1,0].set_xlabel('Theoretical Quantiles', fontsize=12)
     axes[1,0].set_ylabel('Sample Quantiles', fontsize=12)
 
     # ACF plot
-    plot_acf(residuals, lags=55, ax=axes[1,1])
+    plot_acf(stable_residuals, lags=55, ax=axes[1,1])
     axes[1,1].set_title('ACF of Residuals', fontsize=14)
     axes[1,1].set_xlabel('Lag', fontsize=12)
     axes[1,1].set_ylabel('Autocorrelation', fontsize=12)
@@ -400,7 +398,7 @@ def in_sample_resid_analysis(train,
         
     # Optional volatility clustering test
     try:
-        test_volatility_clustering(residuals)
+        test_volatility_clustering(stable_residuals)
     except NameError:
         pass
     
@@ -553,9 +551,9 @@ def out_of_sample_resid_analysis(train_data,
      # --- optional: heteroscedasticity tests ---
     if run_hetero:
         # Use time trend as exogenous variable for the test
-        exog = np.column_stack([np.ones(len(residuals)), np.arange(len(residuals))])
-        bp_p = het_breuschpagan(residuals, exog)[1]
-        white_p = het_white(residuals, exog)[1]
+        exog = np.column_stack([np.ones(len(stable_residuals)), np.arange(len(stable_residuals))])
+        bp_p = het_breuschpagan(stable_residuals, exog)[1]
+        white_p = het_white(stable_residuals, exog)[1]
         
         print('\n--- Heteroscedasticity Tests ---')
         print(f'Breusch-Pagan: p = {bp_p:.4f}')

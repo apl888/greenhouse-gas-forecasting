@@ -33,7 +33,8 @@ def evaluate_models_tscv(
     burn_in_period=52,
     estimation_method='lbfgs',
     enforce_stationarity=False,
-    enforce_invertibility=False): 
+    enforce_invertibility=False,
+    maxiter=300): 
     '''
     Evaluate specified candidate SARIMA/SARIMAX models on time series CV folds.
     Supports optional exogenous regressors (e.g., Fourier terms, weather, etc.).

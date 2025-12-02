@@ -246,6 +246,7 @@ def in_sample_resid_analysis(train,
                              run_hetero=False, 
                              burn_in_period=52,       # changed from trim_first to fixed burn-in
                              estimation_method='lbfgs',
+                             maxiter=300,
                              enforce_stationarity=False, 
                              enforce_invertibility=False):
     '''

@@ -425,7 +425,8 @@ def out_of_sample_resid_analysis(train_data,
                                  plot_forecast=True,
                                  estimation_method='lbfgs',  
                                  enforce_stationarity=False,           
-                                 enforce_invertibility=False):        
+                                 enforce_invertibility=False,
+                                 trend='c'):        
     '''
     Complete residual diagnostics for test set
     

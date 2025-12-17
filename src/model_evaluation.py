@@ -29,11 +29,12 @@ def evaluate_models_tscv(
     exog=None, 
     n_splits=5, 
     test_size=52, 
-    gap=13,        # 3 month gap between train and validation sets to prevent leakage
+    gap=13,                    # 3 month gap between train and validation sets to prevent leakage
     burn_in_period=52,
     estimation_method='lbfgs',
-    enforce_stationarity=False,
-    enforce_invertibility=False,
+    enforce_stationarity=True,
+    enforce_invertibility=True,
+    trend='n',
     maxiter=300): 
     '''
     Evaluate specified candidate SARIMA/SARIMAX models on time series CV folds.
@@ -43,10 +44,12 @@ def evaluate_models_tscv(
     Parameters
     ----------
     burn_in_period : int, default=52
-        Fixed number of initial residuals to exclude from diagnostics
+        Fixed number of initial residuals to exclude from diagnostics, primarily due to the initial model warm-up period
         (prevents data-dependent decisions)
     estimation_method : str, default='lbfgs'
         Better handling of initial values and warm-up period
+    trend : str, default='n' 
+        Use 't' for data with a more linear trend, as is the case with atmospheric CH4 time series data
     '''
     start_time = time.perf_counter()
 
@@ -109,12 +112,13 @@ def evaluate_models_tscv(
                         order=params["order"],
                         seasonal_order=params["seasonal_order"],
                         enforce_stationarity=enforce_stationarity,
-                        enforce_invertibility=enforce_invertibility
+                        enforce_invertibility=enforce_invertibility,
+                        trend=trend
                     )
 
                     results = model.fit(
                         disp=False,
-                        maxiter=2000,
+                        maxiter=maxiter,
                         method=estimation_method
                     )
 
@@ -248,8 +252,10 @@ def in_sample_resid_analysis(train,
                              burn_in_period=52,       # changed from trim_first to fixed burn-in
                              estimation_method='lbfgs',
                              maxiter=300,
-                             enforce_stationarity=False, 
-                             enforce_invertibility=False):
+                             enforce_stationarity=True, 
+                             enforce_invertibility=True,
+                             trend='n'
+                             ):
     '''
     Fit a SARIMA model and run in-sample diagnostics.
     
@@ -278,9 +284,9 @@ def in_sample_resid_analysis(train,
                     exog=exog, 
                     enforce_stationarity=enforce_stationarity, 
                     enforce_invertibility=enforce_invertibility, 
-                    trend='c')
+                    trend=trend)
     
-    results = model.fit(method=estimation_method, disp=False)
+    results = model.fit(method=estimation_method, maxiter=maxiter, disp=False)
 
     # use all residuals for model fitting assessment
     all_residuals = results.resid
@@ -424,10 +430,11 @@ def out_of_sample_resid_analysis(train_data,
                                  exog_test=None,
                                  run_hetero=False,
                                  plot_forecast=True,
+                                 maxiter=300,
                                  estimation_method='lbfgs',  
-                                 enforce_stationarity=False,           
-                                 enforce_invertibility=False,
-                                 trend='c'):        
+                                 enforce_stationarity=True,           
+                                 enforce_invertibility=True,
+                                 trend='n'):        
     '''
     Complete residual diagnostics for test set
     
@@ -460,8 +467,8 @@ def out_of_sample_resid_analysis(train_data,
                     exog=exog_train if exog_train is not None else None,
                     enforce_stationarity=enforce_stationarity, 
                     enforce_invertibility=enforce_invertibility, 
-                    trend='c')
-    results = model.fit(method=estimation_method, disp=False)
+                    trend=trend)
+    results = model.fit(method=estimation_method, maxiter=maxiter, disp=False)
     
     # get forecast with confidence intervals
     forecast_obj = results.get_forecast(

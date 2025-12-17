@@ -155,12 +155,13 @@ def evaluate_models_tscv(
                         
                         if len(stable_resid) >= 52:
                             lb = acorr_ljungbox(stable_resid,
-                                                lags=[1, 5, 10, 52],
+                                                lags=[1, 4, 13, 26, 52],
                                                 return_df=True)
 
                             lb_pval_lag1.append(lb.loc[1,  'lb_pvalue'])
-                            lb_pval_lag5.append(lb.loc[5,  'lb_pvalue'])
-                            lb_pval_lag10.append(lb.loc[10, 'lb_pvalue'])
+                            lb_pval_lag5.append(lb.loc[4,  'lb_pvalue'])
+                            lb_pval_lag10.append(lb.loc[13, 'lb_pvalue'])
+                            lb_pval_lag10.append(lb.loc[26, 'lb_pvalue'])
                             lb_pval_lag52.append(lb.loc[52, 'lb_pvalue'])
 
                 except Exception as e:

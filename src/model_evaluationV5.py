@@ -243,26 +243,6 @@ def test_volatility_clustering(residuals, plot=False):
     
     return arch_test
 
-# === X. Make Fourier terms ===
-def make_fourier_terms(index, 
-                       period=52, 
-                       K=1, 
-                       t0=0):     # t0=0 is a global time index to anchor Fourier terms
-    '''
-    index  : pd.DatetimeIndex (e.g. weekly, DataFrame observations index)
-    period : int (e.g., 52 weeks)
-    K      : number of harmonic pairs (1..K)
-    t0     : integer offset for the first observation, which is crucial for CV
-    returns: DataFrame of shape (len(index), 2*K) with sin_k and cos_k columns
-    '''
-    t = np.arange(t0, t0 + len(index))
-    fourier = {}
-    for k in range(1, K + 1):
-        angle = 2 * np.pi * k * t / period
-        fourier[f'sin_{k}'] = np.sin(angle)
-        fourier[f'cos_{k}'] = np.cos(angle)
-    return pd.DataFrame(fourier, index=index)
-
 # === 2. In-sample residual diagnostics ===
 def in_sample_resid_analysis(train, 
                              order, 

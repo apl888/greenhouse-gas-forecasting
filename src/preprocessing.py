@@ -502,11 +502,11 @@ class GasPreprocessor:
         print(f'ADF and KPSS tests for {label}:')
         print(f'ADF statistic {adf_result[0]:.4f}')
         print(f'ADF p-value {adf_result[1]:.4f}')
-        print(f'ADF critical values: {adf_result[4]}\n')
+        # print(f'ADF critical values: {adf_result[4]}\n')
     
         print(f'KPSS statistic {kpss_result[0]:.4f}')
         print(f'KPSS p-value {kpss_result[1]:.4f}')
-        print(f'KPSS critical values: {kpss_result[3]}\n')
+        # print(f'KPSS critical values: {kpss_result[3]}\n')
     
         if adf_result[1] < 0.05 and kpss_result[1] > 0.05:
             print(f'the {label} time series is likely stationary according to ADF and KPSS tests.\n')

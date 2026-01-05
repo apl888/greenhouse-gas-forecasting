@@ -247,7 +247,7 @@ def test_volatility_clustering(residuals, plot=False):
 def make_fourier_terms(index, 
                        period=52, 
                        K=1, 
-                       t0=0):     # t0=0 is a global time index to anchor Fourier terms
+                       start=0):     # start=0 is a global time index to anchor Fourier terms
     '''
     index  : pd.DatetimeIndex (e.g. weekly, DataFrame observations index)
     period : int (e.g., 52 weeks)
@@ -255,7 +255,7 @@ def make_fourier_terms(index,
     t0     : integer offset for the first observation, which is crucial for CV
     returns: DataFrame of shape (len(index), 2*K) with sin_k and cos_k columns
     '''
-    t = np.arange(t0, t0 + len(index))
+    t = np.arange(start, start + len(index))
     fourier = {}
     for k in range(1, K + 1):
         angle = 2 * np.pi * k * t / period

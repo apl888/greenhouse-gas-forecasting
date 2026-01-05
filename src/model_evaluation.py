@@ -252,7 +252,7 @@ def make_fourier_terms(index,
     index  : pd.DatetimeIndex (e.g. weekly, DataFrame observations index)
     period : int (e.g., 52 weeks)
     K      : number of harmonic pairs (1..K)
-    t0     : integer offset for the first observation, which is crucial for CV
+    start  : integer offset for the first observation (global time anchor)
     returns: DataFrame of shape (len(index), 2*K) with sin_k and cos_k columns
     '''
     t = np.arange(start, start + len(index))

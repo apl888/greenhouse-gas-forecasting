@@ -22,7 +22,68 @@ from statsmodels.api import qqplot
 from scipy import stats
 import time
 
-# === 1. Model Validation via TimeSerisSplitCV ===
+# === 1. Model Validation via rolling-origin with expanding window ===
+def rolling_origin_evaluation(
+    y,
+    order,
+    seasonal_order,
+    start_train_size,
+    horizons=(1, 13, 52),
+    step=13,
+    enforce_stationarity=False,
+    enforce_invertibility=False
+):
+    """
+    Rolling-origin (walk-forward) evaluation with expanding window.
+
+    Parameters
+    ----------
+    y : pd.Series
+        Time series (weekly).
+    order : tuple
+        SARIMA nonseasonal order.
+    seasonal_order : tuple
+        SARIMA seasonal order (P, D, Q, s).
+    start_train_size : int
+        Initial number of observations to train on.
+    horizons : iterable
+        Forecast horizons (in weeks).
+    step : int
+        Step size between forecast origins.
+    """
+
+    results = []
+
+    for t in range(start_train_size, len(y) - max(horizons), step):
+        train = y.iloc[:t]
+
+        model = SARIMAX(
+            train,
+            order=order,
+            seasonal_order=seasonal_order,
+            trend='n',
+            enforce_stationarity=enforce_stationarity,
+            enforce_invertibility=enforce_invertibility
+        )
+
+        res = model.fit(disp=False)
+
+        for h in horizons:
+            forecast = res.get_forecast(steps=h)
+            y_pred = forecast.predicted_mean.iloc[-1]
+            y_true = y.iloc[t + h - 1]
+
+            results.append({
+                'origin' : y.index[t],
+                'horizon': h,
+                'y_true' : y_true,
+                'y_pred' : y_pred,
+                'error'  : y_true - y_pred
+            })
+
+    return pd.DataFrame(results)
+
+# === 2. Model Validation via TimeSerisSplitCV ===
 def evaluate_models_tscv(
     models_list, 
     data, 
@@ -207,7 +268,7 @@ def evaluate_models_tscv(
 
     return pd.DataFrame(results_summary)
 
-# === 1. Volatility / ARCH Check ===
+# === 3. Volatility / ARCH Check ===
 def test_volatility_clustering(residuals, plot=False):
     '''
     Check for GARCH effects in residuals
@@ -243,7 +304,7 @@ def test_volatility_clustering(residuals, plot=False):
     
     return arch_test
 
-# === X. Make Fourier terms ===
+# === 4. Make Fourier terms ===
 def make_fourier_terms(index, 
                        period=52, 
                        K=1, 
@@ -263,7 +324,7 @@ def make_fourier_terms(index,
         fourier[f'cos_{k}'] = np.cos(angle)
     return pd.DataFrame(fourier, index=index)
 
-# === 2. In-sample residual diagnostics ===
+# === 5. In-sample residual diagnostics ===
 def in_sample_resid_analysis(train, 
                              order, 
                              seasonal_order, 
@@ -440,7 +501,7 @@ def in_sample_resid_analysis(train,
 
     return results, stable_residuals
 
-# === 3. Out-of-sample residual diagnostics ===
+# === 6. Out-of-sample residual diagnostics ===
 def out_of_sample_resid_analysis(train_data, 
                                  test_data, 
                                  order, 
@@ -655,7 +716,7 @@ def out_of_sample_resid_analysis(train_data,
     
     return analysis_results, results
 
-# === 4. Summary assumption check ===
+# === 7. Summary assumption check ===
 def summarize_model_assumptions(residuals, alpha=0.05):
     '''
     Evaluate normality, zero-mean, and autocorrelation assumptions.

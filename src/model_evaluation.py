@@ -515,7 +515,8 @@ def out_of_sample_resid_analysis(train_data,
                                  estimation_method='lbfgs',  
                                  enforce_stationarity=True,           
                                  enforce_invertibility=True,
-                                 trend='n'):        
+                                 trend='n',
+                                 seasonal_length=52):        
     '''
     Complete residual diagnostics for test set
     
@@ -565,14 +566,48 @@ def out_of_sample_resid_analysis(train_data,
     #--- accuracy metrics ---
     rmse = np.sqrt(mean_squared_error(test_data, predictions))
     mae = mean_absolute_error(test_data, predictions)
-    mape = np.mean(np.abs(residuals / test_data)) * 100
+    mape = np.mean(np.abs(residuals / test_data.replace(0, np.nan))) * 100
     r2 = r2_score(test_data, predictions)
     
     print('--- Out-of-Sample Forecast Accuracy ---')
     print(f'RMSE: {rmse:.3f}')
     print(f'MAE:  {mae:.3f}') 
-    print(f'MAPE: {mape:.2f}%')
     print(f'R²:   {r2:.3f}')   
+    
+    print('\n--- Horizon-specific RMSE ---')
+    for h in [1,13,26,52]:
+        if h <= len(test_data):
+            rmse_h = np.sqrt(
+                mean_squared_error(
+                    test_data.iloc[:h],
+                    predictions.iloc[:h]
+                    )
+                )
+            print(f'h = {h:2d}: RMSE = {rmse_h:.3f}')
+            
+    print('\n--- Seasonal naive benchmark comparison ---')
+    
+    if len(train_data) < seasonal_length:
+        raise ValueError('Training data shorter than one seasonal cycle')
+    
+    seasonal_naive_forecast = train_data.iloc[-seasonal_length:].values
+    seasonal_naive_forecast = np.tile(
+        seasonal_naive_forecast,
+        int(np.ceil(len(test_data) / seasonal_length))
+    )[:len(test_data)]                                 # trim to exact forecast length in case test data is longer
+    
+    seasonal_naive_forecast = pd.Series(
+        seasonal_naive_forecast,
+        index=test_data.index
+    )
+        
+    naive_rmse = np.sqrt(mean_squared_error(test_data, seasonal_naive_forecast))
+    
+    print(f'Seasonal naive RMSE: {naive_rmse:.3f}')
+    print(f'Skill vs naive: {(1 - rmse / naive_rmse) * 100:.2f}%')
+    print('\n     - skill > 0% --> the model beats naive')
+    print('     - skill = 0% --> the model adds little value')
+    print('     - skill < 0% --> the model is worse than naive')   
     
     #--- forecast coverage (for uncertainty quantification) ---
     coverage = np.mean((test_data >= conf_int.iloc[:,0]) & 

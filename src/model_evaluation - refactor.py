@@ -77,6 +77,17 @@ def skill_vs_naive(y_true, y_pred, y_naive):
     """
     return 1 - rmse(y_true, y_pred) / rmse(y_true, y_naive)
 
+# example notebook usage of metric helpers
+#
+# y_pred = model_forecast
+# rmse_val = rmse(y_test, y_pred)
+# mae_val  = mae(y_test, y_pred)
+# nse_val  = nash_sutcliffe_efficiency(y_test, y_pred)
+#
+# y_naive = seasonal_naive_forecast(y_train, len(y_test), sp=52)
+# skill   = skill_vs_naive(y_test, y_pred, y_naive)
+
+
 # =========================================================
 # Seasonal naive benchmark
 # =========================================================
@@ -90,6 +101,16 @@ def seasonal_naive_forecast(y_train, horizon, sp):
     reps = int(np.ceil(horizon / sp))
     forecast = np.tile(last_season, reps)[:horizon]
     return forecast
+
+# Example notebook usage:
+#
+# y_naive = seasonal_naive_forecast(
+#     y_train=y_train,
+#     horizon=len(y_test),
+#     sp=52
+# )
+#
+# naive_rmse = rmse(y_test, y_naive)
 
 # =========================================================
 # Horizon-specific metrics
@@ -111,6 +132,18 @@ def horizon_squared_error(
             err = y_true.iloc[idx] - y_pred.iloc[idx]
             results[h] = err ** 2
     return results
+
+# Example notebook usage:
+#
+# se_by_horizon = horizon_squared_error(
+#     y_test,
+#     y_pred,
+#     horizons=(1, 13, 26, 52)
+# )
+#
+# # NOTE:
+# # These squared errors should be aggregated across folds/origins
+# # before taking sqrt to compute RMSE_h
 
 # =========================================================
 # CRPS (Gaussian)
@@ -144,8 +177,22 @@ def crps_gaussian(y, mu, sigma):
 
     return np.mean(crps)
 
+# Example notebook usage:
+#
+# mean, sigma, _ = forecast_mean_model(
+#     fitted_model,
+#     model_type="sarima",
+#     horizon=len(y_test)
+# )
+#
+# crps = crps_gaussian(
+#     y=y_test,
+#     mu=mean,
+#     sigma=sigma
+# )
+
 # =========================================================
-# 1. Mean model fitting (ABSTRACTION LAYER)
+# 1. Mean model fitting (Abstraction layer)
 # =========================================================
 
 def fit_mean_model(y, 
@@ -185,6 +232,21 @@ def fit_mean_model(y,
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
+# Example notebook usage:
+#
+# sarima_params = {
+#     "order": (1,1,1),
+#     "seasonal_order": (1,1,1,52),
+#     "trend": "n"
+# }
+#
+# fitted = fit_mean_model(
+#     y=y_train,
+#     model_type="sarima",
+#     model_params=sarima_params,
+#     exog=exog_train,
+#     verbose=True
+# )
 
 # =========================================================
 # 2. Forecasting wrapper
@@ -217,6 +279,25 @@ def forecast_mean_model(fitted_model,
             intervals = None
 
         return mean, sigma, intervals
+
+# Example notebook usage:
+#
+# mean, sigma, intervals = forecast_mean_model(
+#     fitted_model=fitted,
+#     model_type="sarima",
+#     horizon=len(y_test),
+#     exog=exog_test
+# )
+#
+# plt.plot(y_test.index, y_test, label="Observed")
+# plt.plot(mean.index, mean, label="Forecast")
+# plt.fill_between(
+#     mean.index,
+#     intervals.iloc[:,0],
+#     intervals.iloc[:,1],
+#     alpha=0.3
+# )
+# plt.legend()
 
 # =========================================================
 # 3. Residual diagnostics (in + out-of-sample)
@@ -273,6 +354,20 @@ def residual_diagnostics(residuals, title='', plot=True):
 
     return lb, jb_p, adf_p
 
+# Example notebook usage:
+#
+# in_sample_resid = fitted.resid
+# residual_diagnostics(
+#     in_sample_resid,
+#     title="SARIMA in-sample residuals"
+# )
+#
+# out_sample_resid = y_test - mean
+# residual_diagnostics(
+#     out_sample_resid,
+#     title="SARIMA forecast residuals"
+# )
+
 # =========================================================
 # 4. GARCH volatility modeling
 # =========================================================
@@ -298,6 +393,19 @@ def fit_garch(residuals,
 
     return res
 
+# Example notebook usage:
+#
+# residuals = y_train - fitted.fittedvalues
+#
+# garch_res = fit_garch(
+#     residuals,
+#     p=1,
+#     q=1,
+#     dist="normal",
+#     verbose=True
+# )
+#
+# garch_res.summary()
 
 # =========================================================
 # 5. TimeSeriesSplit cross-validation (metrics only)
@@ -369,6 +477,20 @@ def evaluate_models_tscv(
 
     return pd.DataFrame(rows)
 
+# Example notebook usage:
+#
+# cv_results = evaluate_models_tscv(
+#     y=y,
+#     model_type="ets",
+#     model_params={"sp": 52, "trend": "add"},
+#     sp=52,
+#     n_splits=5,
+#     test_size=52,
+#     gap=13
+# )
+#
+# cv_results.groupby("model").mean()
+
 # =========================================================
 # 6. Unified model evaluation (standard output)
 # =========================================================
@@ -432,6 +554,19 @@ def evaluate_forecast(
         )
 
     return results
+
+# Example notebook usage:
+#
+# metrics = evaluate_forecast(
+#     y_train=y_train,
+#     y_test=y_test,
+#     y_pred=mean,
+#     sp=52,
+#     intervals=intervals,
+#     sigma=sigma
+# )
+#
+# metrics
 
 # =========================================================
 # 7. Rolling-origin (walk-forward) evaluation
@@ -499,6 +634,21 @@ def rolling_origin_evaluation(
 
     return results
 
+# Example notebook usage:
+#
+# ro_results = rolling_origin_evaluation(
+#     y=y,
+#     model_type="tbats",
+#     model_params={"sp": 52},
+#     start_train_size=156,
+#     horizon=52,
+#     step=13,
+#     sp=52
+# )
+#
+# df_ro = summarize_evaluations(ro_results)
+# df_ro.groupby("model").mean()
+
 # =========================================================
 # 8. Results aggregation / comparison
 # =========================================================
@@ -532,6 +682,16 @@ def summarize_evaluations(results_list):
 
     return df
 
+# Example notebook usage:
+#
+# all_results = []
+# all_results.extend(ro_results_sarima)
+# all_results.extend(ro_results_ets)
+# all_results.extend(ro_results_tbats)
+#
+# comparison_df = summarize_evaluations(all_results)
+# comparison_df.sort_values("RMSE")
+
 # =========================================================
 # 9. GARCH-adjusted interval coverage
 # =========================================================
@@ -564,7 +724,18 @@ def garch_adjusted_coverage(
         "upper"   : upper,
         "coverage": coverage
     }
-    
+
+# Example notebook usage:
+#
+# garch_adj = garch_adjusted_coverage(
+#     y_true=y_test,
+#     garch_model=garch_res,
+#     mean_forecast=mean,
+#     alpha=0.05
+# )
+#
+# garch_adj["coverage"]
+
 # =========================================================
 # 10. Diebold–Mariano test
 # =========================================================
@@ -588,10 +759,13 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
 
     return dm_stat, p_value
 
-# DM test usage in notebook
-
-# dm, p = diebold_mariano(
-#     errors_model_A,
-#     errors_model_B,
-#     loss='mse'
+# Example notebook usage:
+#
+# errors_A = y_test - mean_model_A
+# errors_B = y_test - mean_model_B
+#
+# dm_stat, p_val = diebold_mariano(
+#     errors_A,
+#     errors_B,
+#     loss="mse"
 # )

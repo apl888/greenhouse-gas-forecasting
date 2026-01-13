@@ -40,6 +40,7 @@ from sktime.forecasting.ets import AutoETS
 from arch import arch_model
 import matplotlib.pyplot as plt
 from scipy import stats
+from scipy.stats import norm
 
 # ---------------------------------------------------------
 # Logging setup
@@ -65,6 +66,8 @@ def nash_sutcliffe_efficiency(y_true, y_pred):
     """
     numerator = np.sum((y_true - y_pred) ** 2)
     denominator = np.sum((y_true - np.mean(y_true)) ** 2)
+    if denominator == 0:
+        return np.nan
     return 1 - numerator / denominator
 
 
@@ -92,24 +95,26 @@ def seasonal_naive_forecast(y_train, horizon, sp):
 # Horizon-specific metrics
 # =========================================================
 
-def horizon_rmse(y_true, 
-                 y_pred, 
-                 horizons=(1, 13, 26, 52)):
+def horizon_squared_error(
+    y_true,
+    y_pred,
+    horizons=(1, 13, 26, 52)
+):
     """
-    RMSE at specific horizons (pointwise error).
+    Squared error at specific horizons.
+    RMSE must be computed after aggregation across origins or folds.
     """
     results = {}
     for h in horizons:
         idx = h - 1
         if idx < len(y_true):
-            results[h] = np.sqrt((y_true[idx] - y_pred[idx]) ** 2)
+            err = y_true.iloc[idx] - y_pred.iloc[idx]
+            results[h] = err ** 2
     return results
 
 # =========================================================
 # CRPS (Gaussian)
 # =========================================================
-
-from scipy.stats import norm
 
 def crps_gaussian(y, mu, sigma):
     """
@@ -128,7 +133,7 @@ def crps_gaussian(y, mu, sigma):
     """
     y = np.asarray(y)
     mu = np.asarray(mu)
-    sigma = np.asarray(sigma)
+    sigma = np.maximum(np.asarray(sigma), 1e-8)
 
     z = (y - mu) / sigma
     crps = sigma * (
@@ -268,7 +273,6 @@ def residual_diagnostics(residuals, title='', plot=True):
 
     return lb, jb_p, adf_p
 
-
 # =========================================================
 # 4. GARCH volatility modeling
 # =========================================================
@@ -338,7 +342,7 @@ def evaluate_models_tscv(
                 verbose=verbose
             )
 
-            mean, _, intervals = forecast_mean_model(
+            mean, sigma, intervals = forecast_mean_model(
                 fitted,
                 model_type,
                 horizon=len(y_test),
@@ -350,7 +354,8 @@ def evaluate_models_tscv(
                 y_test=y_test,
                 y_pred=mean,
                 sp=sp,
-                intervals=intervals
+                intervals=intervals,
+                sigma=sigma
             )
 
             metrics["fold"] = fold + 1
@@ -390,14 +395,14 @@ def evaluate_forecast(
     results["NSE"]  = nash_sutcliffe_efficiency(y_test, y_pred)
 
     # --- Horizon-specific ---
-    results["Horizon_RMSE"] = horizon_rmse(
+    results["Horizon_SE"] = horizon_squared_error(
         y_test,
         y_pred,
         horizons=horizons
     )
     
     # --- CRPS score ---
-    if sigma is not Note:
+    if sigma is not None:
         results["CRPS"] = crps_gaussian(y_test, y_pred, sigma)
     else:
         results["CRPS"] = np.nan
@@ -418,10 +423,12 @@ def evaluate_forecast(
 
     # --- Interval coverage ---
     if intervals is not None:
-        lower = intervals.iloc[:, 0]
-        upper = intervals.iloc[:, 1]
+        y = y_test.values
+        lower = intervals.iloc[:, 0].values
+        upper = intervals.iloc[:, 1].values
+
         results["Interval_Coverage"] = np.mean(
-            (y_test >= lower) & (y_test <= upper)
+            (y >= lower) & (y <= upper)
         )
 
     return results
@@ -465,7 +472,7 @@ def rolling_origin_evaluation(
                 verbose=verbose
             )
 
-            preds, intervals = forecast_mean_model(
+            mean, sigma, intervals = forecast_mean_model(
                 fitted,
                 model_type,
                 horizon=len(y_test),
@@ -475,9 +482,10 @@ def rolling_origin_evaluation(
             metrics = evaluate_forecast(
                 y_train=y_train,
                 y_test=y_test,
-                y_pred=preds,
+                y_pred=mean,
                 sp=sp,
-                intervals=intervals
+                intervals=intervals,
+                sigma=sigma
             )
 
             metrics["origin"] = y.index[t]
@@ -515,8 +523,8 @@ def summarize_evaluations(results_list):
         }
 
         # Flatten horizon RMSE
-        for h, val in res.get("Horizon_RMSE", {}).items():
-            row[f"RMSE_h{h}"] = val
+        for h, se in res.get("Horizon_SE", {}).items():
+            row[f"RMSE_h{h}"] = np.sqrt(se)
 
         rows.append(row)
 
@@ -529,7 +537,7 @@ def summarize_evaluations(results_list):
 # =========================================================
 
 def garch_adjusted_coverage(
-    residuals,
+    y_true,
     garch_model,
     mean_forecast,
     alpha=0.05
@@ -538,17 +546,18 @@ def garch_adjusted_coverage(
     Adjust forecast intervals using GARCH conditional volatility.
     """
 
-    cond_vol = garch_model.conditional_volatility / 100.0
+    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] / 100.0
 
     z = stats.norm.ppf(1 - alpha / 2)
 
     lower = mean_forecast - z * cond_vol
     upper = mean_forecast + z * cond_vol
 
-    coverage = np.mean(
-        (y_true >= lower) &
-        (y_true <= upper)
-    )
+    y = y_true.values
+    lower = np.asarray(lower)
+    upper = np.asarray(upper)
+
+    coverage = np.mean((y >= lower) & (y <= upper))
 
     return {
         "lower"   : lower,

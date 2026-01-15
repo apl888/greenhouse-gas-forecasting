@@ -203,6 +203,7 @@ def fit_mean_model(y,
                    model_type, 
                    model_params, 
                    exog=None, 
+                   start_params=None,
                    verbose=False):
     """
     Fits a mean model and returns a fitted object.
@@ -222,7 +223,8 @@ def fit_mean_model(y,
             enforce_stationarity=False,
             enforce_invertibility=False
         )
-        return model.fit(disp=False, 
+        return model.fit(start_params=start_params,
+                         disp=False, 
                          maxiter=model_params.get('maxiter', 300))
 
     elif model_type == 'ets':

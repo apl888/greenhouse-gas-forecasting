@@ -578,28 +578,28 @@ def rolling_origin_evaluation(
     model_params,
     exog=None,
     start_train_size=156,
-    horizon=52,
+    H_MAX=52,
+    eval_horizons=(1, 13, 26, 52),
     step=13,
-    sp=None,
     verbose=False
 ):
     """
     Rolling-origin evaluation using expanding window.
-    Returns a list of evaluation dicts (one per origin).
+    Returns one record per (origin, horizon).
     """
 
     results = []
 
-    for t in range(start_train_size, len(y) - horizon + 1, step):
-        
+    for t in range(start_train_size, len(y) - H_MAX + 1, step):
+
         if verbose:
-            print(f"Rolling-origin fold: train_end={t}, horizon={horizon}")
+            print(f"Rolling-origin fold: train_end={t}")
 
         y_train = y.iloc[:t]
-        y_test  = y.iloc[t:t + horizon]
+        y_test  = y.iloc[t:t + H_MAX]
 
         exog_train = exog.iloc[:t] if exog is not None else None
-        exog_test  = exog.iloc[t:t + horizon] if exog is not None else None
+        exog_test  = exog.iloc[t:t + H_MAX] if exog is not None else None
 
         try:
             fitted = fit_mean_model(
@@ -613,24 +613,28 @@ def rolling_origin_evaluation(
             mean, sigma, intervals = forecast_mean_model(
                 fitted,
                 model_type,
-                horizon=len(y_test),
+                horizon=H_MAX,
                 exog=exog_test
             )
 
-            metrics = evaluate_forecast(
-                y_train=y_train,
-                y_test=y_test,
-                y_pred=mean,
-                sp=sp,
-                intervals=intervals,
-                sigma=sigma
-            )
+            for h in eval_horizons:
+                err = mean.iloc[h - 1] - y_test.iloc[h - 1]
 
-            metrics["origin"] = y.index[t]
-            metrics["model"] = model_type
+                # debug – first successful error only
+                if verbose and len(results) == 0:
+                    print("DEBUG err value:", err)
+                    print("DEBUG err type:", type(err))
+                    print("DEBUG err ndim:", np.ndim(err))
 
-            results.append(metrics)
-                
+                results.append({
+                    "origin": y.index[t],
+                    "model": model_type,
+                    "horizon": h,
+                    "error": err,
+                    "abs_error": abs(err),
+                    "sq_error": err**2
+                })
+
         except Exception as e:
             print(f"Fold failed at t={t}: {e}")
             continue
@@ -641,16 +645,31 @@ def rolling_origin_evaluation(
 #
 # ro_results = rolling_origin_evaluation(
 #     y=y,
-#     model_type="tbats",
-#     model_params={"sp": 52},
+#     model_type="sarima",
+#     model_params={
+#         "order": (1, 1, 1),
+#         "seasonal_order": (2, 0, 0, 52),
+#         "trend": "n"
+#     },
 #     start_train_size=156,
-#     horizon=52,
-#     step=13,
-#     sp=52
+#     H_MAX=52,
+#     eval_horizons=(1, 13, 26, 52),
+#     step=13
 # )
 #
-# df_ro = summarize_evaluations(ro_results)
-# df_ro.groupby("model").mean()
+# df_ro = pd.DataFrame(ro_results)
+#
+# summary = (
+#     df_ro.groupby(["model", "horizon"])
+#          .agg(
+#              rmse=("sq_error", lambda x: np.sqrt(x.mean())),
+#              mae=("abs_error", "mean"),
+#              n_folds=("error", "count")
+#          )
+#          .reset_index()
+# )
+#
+# summary
 
 # =========================================================
 # 8. Results aggregation / comparison

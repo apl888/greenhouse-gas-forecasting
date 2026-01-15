@@ -24,6 +24,10 @@ import numpy as np
 import pandas as pd
 import warnings
 import logging
+import time
+import os
+import pickle
+from tqdm.auto import tqdm
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
@@ -581,19 +585,40 @@ def rolling_origin_evaluation(
     H_MAX=52,
     eval_horizons=(1, 13, 26, 52),
     step=13,
+    checkpoint_path=None,
     verbose=False
 ):
     """
     Rolling-origin evaluation using expanding window.
     Returns one record per (origin, horizon).
     """
-
+    start_time = time.time()
+    
     results = []
-
-    for t in range(start_train_size, len(y) - H_MAX + 1, step):
-
+    last_params = None    # warm-start state (internal) 
+    
+    completed_origins = set()  
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        with open(checkpoint_path, 'rb') as f:
+            ckpt = pickle.load(f)
+            results = ckpt['results']
+            completed_origins = ckpt['completed_origins']
+            
         if verbose:
-            print(f"Rolling-origin fold: train_end={t}")
+            print(f"Loaded checkpoint with {len(completed_origins)} completed folds")
+    
+    origins = list(range(start_train_size, len(y) - H_MAX + 1, step))
+    n_folds_total = len(origins) 
+    
+    pbar = tqdm(origins, desc="Rolling-origin folds", unit="fold")
+    
+    completed_count = len(completed_origins)
+
+    for t in pbar:
+        
+        if t in completed_origins:
+            pbar.update(0)
+            continue
 
         y_train = y.iloc[:t]
         y_test  = y.iloc[t:t + H_MAX]
@@ -607,16 +632,19 @@ def rolling_origin_evaluation(
                 model_type,
                 model_params,
                 exog=exog_train,
+                start_params=last_params,  # warm-start 
                 verbose=verbose
             )
 
+            last_params = fitted.params    # update warm-start
+            
             mean, sigma, intervals = forecast_mean_model(
                 fitted,
                 model_type,
                 horizon=H_MAX,
                 exog=exog_test
             )
-
+            
             for h in eval_horizons:
                 err = mean.iloc[h - 1] - y_test.iloc[h - 1]
 
@@ -634,9 +662,32 @@ def rolling_origin_evaluation(
                     "abs_error": abs(err),
                     "sq_error": err**2
                 })
+                
+            completed_origins.add(t)
+            completed_count += 1
+            
+            if checkpoint_path:
+                with open(checkpoint_path, 'wb') as f:
+                    pickle.dump(
+                        {
+                            "completed_origins": completed_origins,
+                            "results"          : results
+                        },
+                        f
+                    )
+                
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            avg_per_fold = elapsed_time / completed_count
+            eta = avg_per_fold * (n_folds_total - completed_count)
+                
+            pbar.set_postfix(
+                elapsed_min=f"{elapsed_time/60:.2f}",
+                eta_min=f"{eta/60:.2f}"
+            )
 
         except Exception as e:
-            print(f"Fold failed at t={t}: {e}")
+            tqdm.write(f"Fold failed at t={t}: {e}")
             continue
 
     return results
@@ -663,7 +714,7 @@ def rolling_origin_evaluation(
 #     df_ro.groupby(["model", "horizon"])
 #          .agg(
 #              rmse=("sq_error", lambda x: np.sqrt(x.mean())),
-#              mae=("abs_error", "mean"),
+#              mae=("abs_error", lambda x: np.mean(np.abs(x))),
 #              n_folds=("error", "count")
 #          )
 #          .reset_index()

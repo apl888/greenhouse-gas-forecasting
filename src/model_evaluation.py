@@ -842,5 +842,5 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
 # dm_stat, p_val = diebold_mariano(
 #     errors_A,
 #     errors_B,
-#     loss="mse"
+#     loss="mae"
 # )

@@ -231,7 +231,7 @@ def fit_mean_model(y,
             error=model_params['error'],
             trend=model_params['trend'],
             seasonal=model_params['seasonal'],
-            seasonal_periods=model_params.get('seasonal_periods', None),
+            sp=model_params.get('sp', None),
             initialization_method=model_params.get('initialization_method', 'heuristic')
         )
         return model.fit(y)

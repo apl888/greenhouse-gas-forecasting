@@ -226,10 +226,18 @@ def fit_mean_model(y,
         return model.fit(start_params=start_params,
                          disp=False, 
                          maxiter=model_params.get('maxiter', 300))
-
     elif model_type == 'ets':
-        model = AutoETS(**model_params)
+        model = AutoETS(
+            error=model_params['error'],
+            trend=model_params['trend'],
+            seasonal=model_params['seasonal'],
+            seasonal_periods=model_params.get('seasonal_periods', None),
+            initialization_method=model_params.get('initialization_method', 'heuristic')
+        )
         return model.fit(y)
+    # elif model_type == 'ets':
+    #     model = AutoETS(**model_params)
+    #     return model.fit(y)
 
     elif model_type == 'tbats':
         model = TBATS(**model_params)

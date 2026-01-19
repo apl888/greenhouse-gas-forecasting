@@ -605,7 +605,7 @@ def rolling_origin_evaluation(
     start_time = time.time()
     
     results = []
-    last_params = None    # warm-start state (internal) 
+    #last_params = None    # warm-start state (internal) 
     
     completed_origins = set()  
     if checkpoint_path and os.path.exists(checkpoint_path):
@@ -642,11 +642,11 @@ def rolling_origin_evaluation(
                 model_type,
                 model_params,
                 exog=exog_train,
-                start_params=last_params,  # warm-start 
+                #start_params=last_params,  # warm-start 
                 verbose=verbose
             )
 
-            last_params = fitted.params    # update warm-start
+            #last_params = fitted.params    # update warm-start
             
             mean, sigma, intervals = forecast_mean_model(
                 fitted,

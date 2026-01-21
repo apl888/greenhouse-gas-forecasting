@@ -64,15 +64,21 @@ def mae(y_true, y_pred):
     return mean_absolute_error(y_true, y_pred)
 
 
-def nash_sutcliffe_efficiency(y_true, y_pred):
+def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
     """
-    NSE is an element of (-inf, 1], benchmark = mean of observations
+    Out-of-Sample.
+    NSE is an element of (-inf, 1].
+    benchmark = training mean.
     """
+    y_bar = np.mean(y_train)
     numerator = np.sum((y_true - y_pred) ** 2)
-    denominator = np.sum((y_true - np.mean(y_true)) ** 2)
+    denominator = np.sum((y_true - y_bar) ** 2)
     if denominator == 0:
         return np.nan
     return 1 - numerator / denominator
+
+# Note:  NSE is computed relative to the in-sample climatological mean, 
+# consistent with hydrological and environmental forecasting standards.
 
 
 def skill_vs_naive(y_true, y_pred, y_naive):
@@ -652,7 +658,19 @@ def rolling_origin_evaluation(
             )
             
             for h in eval_horizons:
-                err = mean.iloc[h - 1] - y_test.iloc[h - 1]
+                y_hat = mean.iloc[h - 1]
+                y_true = y_test.iloc[h - 1]
+
+                # seasonal naive
+                naive_fcst = seasonal_naive_forecast(
+                    y_train=y_train.values,
+                    horizon=h,
+                    sp=52
+                )
+                y_naive = naive_fcst[h - 1]
+
+                err = y_hat - y_true
+                naive_err = y_naive - y_true
 
                 # debug – first successful error only
                 if verbose and len(results) == 0:
@@ -664,7 +682,11 @@ def rolling_origin_evaluation(
                     "origin": y.index[t],
                     "model": model_type,
                     "horizon": h,
+                    "y_true": y_true,
+                    "y_pred": y_hat,
+                    "y_naive": y_naive,
                     "error": err,
+                    "naive_error": naive_err,
                     "abs_error": abs(err),
                     "sq_error": err**2
                 })

@@ -605,7 +605,6 @@ def rolling_origin_evaluation(
     start_time = time.time()
     
     results = []
-    #last_params = None    # warm-start state (internal) 
     
     completed_origins = set()  
     if checkpoint_path and os.path.exists(checkpoint_path):
@@ -642,11 +641,8 @@ def rolling_origin_evaluation(
                 model_type,
                 model_params,
                 exog=exog_train,
-                #start_params=last_params,  # warm-start 
                 verbose=verbose
             )
-
-            #last_params = fitted.params    # update warm-start
             
             mean, sigma, intervals = forecast_mean_model(
                 fitted,
@@ -825,9 +821,27 @@ def garch_adjusted_coverage(
 
 def diebold_mariano(e1, e2, h=1, loss='mse'):
     """
-    Diebold–Mariano test for forecast comparison.
-    """
+    Diebold–Mariano test with Newey–West (HAC) variance correction.
 
+    Parameters
+    ----------
+    e1, e2 : array-like
+        Forecast errors from model A and model B (aligned by origin).
+    h : int
+        Forecast horizon.
+    loss : {"mae", "mse"}
+        Loss function used in comparison.
+
+    Returns
+    -------
+    dm_stat : float
+        DM test statistic.
+    p_value : float
+        Two-sided p-value.
+    """
+    e1 = np.asarray(e1)
+    e2 = np.asarray(e2)
+    
     if loss == 'mse':
         d = e1**2 - e2**2
     elif loss == 'mae':
@@ -835,10 +849,21 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
     else:
         raise ValueError("loss must be 'mse' or 'mae'")
 
+    T = len(d)
     mean_d = np.mean(d)
-    var_d = np.var(d, ddof=1)
-    dm_stat = mean_d / np.sqrt(var_d / len(d))
-    p_value = 2 * (1 - stats.norm.cdf(abs(dm_stat)))
+
+    # HAC variance (Newey–West)
+    max_lag = h - 1
+    gamma0 = np.var(d, ddof=1)
+
+    var_d = gamma0
+    for lag in range(1, max_lag + 1):
+        weight = 1 - lag / (max_lag + 1)
+        cov = np.cov(d[lag:], d[:-lag], ddof=1)[0, 1]
+        var_d += 2 * weight * cov
+
+    dm_stat = mean_d / np.sqrt(var_d / T)
+    p_value = 2 * (1 - stats.norm.cdf(np.abs(dm_stat)))
 
     return dm_stat, p_value
 

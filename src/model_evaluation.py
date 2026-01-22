@@ -83,7 +83,7 @@ def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
 
 def skill_vs_naive(y_true, y_pred, y_naive):
     """
-    Skill relative to naive benchmark
+    RMSE skill relative to naive benchmark
     """
     return 1 - rmse(y_true, y_pred) / rmse(y_true, y_naive)
 
@@ -226,8 +226,8 @@ def fit_mean_model(y,
             order=model_params['order'],
             seasonal_order=model_params['seasonal_order'],
             trend=model_params.get('trend', 'n'),
-            enforce_stationarity=False,
-            enforce_invertibility=False
+            enforce_stationarity=model_params.get('enforce_stationarity', True),
+            enforce_invertibility=model_params.get('enforce_invertibility', True)
         )
         return model.fit(start_params=start_params,
                          disp=False, 
@@ -350,8 +350,9 @@ def residual_diagnostics(residuals, title='', plot=True):
         print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
 
     # --- Stationarity ---
-    adf_p = adfuller(residuals)[1]
-    print(f"ADF p-value: {adf_p:.4f}")
+    if len(residuals) > 50:
+        adf_p = adfuller(residuals, autolag='AIC')[1]
+        print(f"ADF p-value: {adf_p:.4f}")
 
     if plot:
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
@@ -444,6 +445,7 @@ def evaluate_models_tscv(
 ):
     """
     TimeSeriesSplit cross-validation using standardized metrics.
+    Use for hyperparameter screening and tuning.
     """
     tscv = TimeSeriesSplit(
         n_splits=n_splits,
@@ -534,7 +536,7 @@ def evaluate_forecast(
     # --- Core accuracy ---
     results["RMSE"] = rmse(y_test, y_pred)
     results["MAE"]  = mae(y_test, y_pred)
-    results["NSE"]  = nash_sutcliffe_efficiency(y_test, y_pred)
+    results["NSE"]  = nash_sutcliffe_efficiency(y_test, y_pred, y_train)
 
     # --- Horizon-specific ---
     results["Horizon_SE"] = horizon_squared_error(
@@ -601,6 +603,7 @@ def rolling_origin_evaluation(
     H_MAX=52,
     eval_horizons=(1, 13, 26, 52),
     step=13,
+    sp=52,
     checkpoint_path=None,
     verbose=False
 ):
@@ -622,7 +625,7 @@ def rolling_origin_evaluation(
         if verbose:
             print(f"Loaded checkpoint with {len(completed_origins)} completed folds")
     
-    origins = list(range(start_train_size, len(y) - H_MAX + 1, step))
+    origins = list(range(start_train_size, len(y) - H_MAX + 1, step)) # expanding window 
     n_folds_total = len(origins) 
     
     pbar = tqdm(origins, desc="Rolling-origin folds", unit="fold")
@@ -679,16 +682,18 @@ def rolling_origin_evaluation(
                     print("DEBUG err ndim:", np.ndim(err))
 
                 results.append({
-                    "origin": y.index[t],
-                    "model": model_type,
-                    "horizon": h,
-                    "y_true": y_true,
-                    "y_pred": y_hat,
-                    "y_naive": y_naive,
-                    "error": err,
+                    "origin"     : y.index[t],
+                    "model"      : model_type,
+                    "horizon"    : h,
+                    "y_true"     : y_true,
+                    "y_pred"     : y_hat,
+                    "y_naive"    : y_naive,
+                    "error"      : err,
                     "naive_error": naive_err,
-                    "abs_error": abs(err),
-                    "sq_error": err**2
+                    "abs_error"  : abs(err),
+                    "sq_error"   : err**2,
+                    "origin_idx" : t,
+                    "train_size" : len(y_train)
                 })
                 
             completed_origins.add(t)

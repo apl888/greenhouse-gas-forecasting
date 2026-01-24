@@ -66,9 +66,10 @@ def mae(y_true, y_pred):
 
 def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
     """
+    Classical Nash–Sutcliffe Efficiency.
     Out-of-Sample.
-    NSE is an element of (-inf, 1].
-    benchmark = training mean.
+    Benchmark = training-period mean.
+    NOT appropriate for seasonal rolling-origin forecast comparison.
     """
     y_bar = np.mean(y_train)
     numerator = np.sum((y_true - y_pred) ** 2)
@@ -83,6 +84,7 @@ def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
 def nse_vs_naive(y_true, y_pred, y_naive):
     """
     Nash-Sutcliffe efficiency relative to seasonal naive benchmark.
+    Appropriate for rolling-origin forecast evaluation.
     """
     numerator = np.sum((y_true - y_pred) ** 2)
     denominator = np.sum((y_true - y_naive) ** 2)

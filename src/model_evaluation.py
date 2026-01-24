@@ -80,6 +80,16 @@ def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
 # Note:  NSE is computed relative to the in-sample climatological mean, 
 # consistent with hydrological and environmental forecasting standards.
 
+def nse_vs_naive(y_true, y_pred, y_naive):
+    """
+    Nash-Sutcliffe efficiency relative to seasonal naive benchmark.
+    """
+    numerator = np.sum((y_true - y_pred) ** 2)
+    denominator = np.sum((y_true - y_naive) ** 2)
+    if denominator == 0:
+        return np.nan
+    return 1 - numerator / denominator
+
 
 def skill_vs_naive(y_true, y_pred, y_naive):
     """

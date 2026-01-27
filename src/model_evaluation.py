@@ -66,7 +66,7 @@ def mae(y_true, y_pred):
 
 def nash_sutcliffe_efficiency(y_true, y_pred, y_train):
     """
-    Classical Nash–Sutcliffe Efficiency.
+    Classical Nash-Sutcliffe Efficiency.
     Out-of-Sample.
     Benchmark = training-period mean.
     NOT appropriate for seasonal rolling-origin forecast comparison.
@@ -92,6 +92,9 @@ def nse_vs_naive(y_true, y_pred, y_naive):
         return np.nan
     return 1 - numerator / denominator
 
+# Note: For reporting on methane data, standard NSE can be misleading. Because the CH4 trend 
+# is so aggressive, almost any model that captures a basic upward slope will have a very high 
+# standard NSE, simply because the "mean of the data" is a very poor predictor for a trending series.
 
 def skill_vs_naive(y_true, y_pred, y_naive):
     """

@@ -354,13 +354,13 @@ def residual_diagnostics(residuals, title='', plot=True):
 
     # --- Normality ---
     jb_stat, jb_p, _, _ = jarque_bera(residuals)
-    print(f"Jarque-Bera p-value: {jb_p:.4f}")
+    print(f"\nJarque-Bera p-value: {jb_p:.4f}")
 
     # --- Autocorrelation ---
     lb = acorr_ljungbox(residuals, 
                         lags=[1, 4, 13, 26, 52], 
                         return_df=True)
-    print("Ljung-Box p-values:")
+    print("\nLjung-Box p-values:")
     for lag in lb.index:
         print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
 

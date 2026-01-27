@@ -244,9 +244,15 @@ def fit_mean_model(y,
             enforce_stationarity=model_params.get('enforce_stationarity', True),
             enforce_invertibility=model_params.get('enforce_invertibility', True)
         )
-        return model.fit(start_params=start_params,
-                         disp=False, 
-                         maxiter=model_params.get('maxiter', 300))
+        results = model.fit(
+            start_params=start_params,
+            disp=False,
+            maxiter=model_params.get('maxiter', 300)
+        )
+
+        fitted = results.fittedvalues
+        resid = results.resid
+        
     elif model_type == 'ets':
         model = AutoETS(
             error=model_params['error'],
@@ -255,17 +261,27 @@ def fit_mean_model(y,
             sp=model_params.get('sp', None),
             initialization_method=model_params.get('initialization_method', 'heuristic')
         )
-        return model.fit(y)
-    # elif model_type == 'ets':
-    #     model = AutoETS(**model_params)
-    #     return model.fit(y)
+        results = model.fit(y)
+
+        fitted = results.fittedvalues
+        resid = results.resid
 
     elif model_type == 'tbats':
         model = TBATS(**model_params)
-        return model.fit(y)
+        results = model.fit(y)
+
+        fitted = results.predict_in_sample()
+        resid = y - fitted
 
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
+
+    return {
+        "model_type": model_type,
+        "fitted_model": results,
+        "fitted_values": fitted,
+        "residuals": pd.Series(resid, index=y.index)
+    }
 
 # Example notebook usage:
 #

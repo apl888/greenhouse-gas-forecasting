@@ -367,7 +367,7 @@ def residual_diagnostics(residuals, title='', plot=True):
     # --- Stationarity ---
     if len(residuals) > 50:
         adf_p = adfuller(residuals, autolag='AIC')[1]
-        print(f"ADF p-value: {adf_p:.4f}")
+        print(f"\nADF p-value: {adf_p:.4f}")
 
     if plot:
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))

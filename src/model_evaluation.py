@@ -270,7 +270,7 @@ def fit_mean_model(y,
         model = TBATS(**model_params)
         results = model.fit(y)
 
-        fitted = results.results.fittedvalues_
+        fitted = results.predict(fh=y.index)
         resid = y - fitted
 
     else:

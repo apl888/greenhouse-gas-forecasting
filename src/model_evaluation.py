@@ -277,7 +277,7 @@ def fit_mean_model(y,
         results = model.fit(y)
         
         # udr sktime's dedicated method for in-sample innovations
-        resid = model.predict_residuals()
+        resid = results.predict_residuals()
         
         # derive fitted values from residuals
         fitted = y - resid

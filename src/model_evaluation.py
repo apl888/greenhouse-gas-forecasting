@@ -263,8 +263,8 @@ def fit_mean_model(y,
         fitted = results.fittedvalues.iloc[n_burn:]
         resid = results.resid.iloc[n_burn:]
 
-        fitted = results.fittedvalues
-        resid = results.resid
+        # fitted = results.fittedvalues
+        # resid = results.resid
         
     elif model_type == 'ets':
         model = AutoETS(

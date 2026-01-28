@@ -249,19 +249,15 @@ def fit_mean_model(y,
             disp=False,
             maxiter=model_params.get('maxiter', 300)
         )
+        burn_in = max(
+            model_params['order'][1],
+            model_params['order'][0] + model_params['order'][2]
+        )
         
-        # statsmodels SARIMAX implementation can produce an initial spike in residuals caused by the Kalman filter's diffuse
-        # initialization process.  This large, initial residual should be removed from diagnostics since it is an artifact of 
-        # the fitting algorithm and not a failure of the model to capture data dynamics.  
+        burn_in = max(burn_in, 5)
         
-        n_burn = results.nobs_diffuse             # get the number of initial values to ignore
-
-        # nobs_diffuse is an integer attribute of the statsmodels SARIMAX results object that indicates exactly how many initial 
-        # observations the model used in its diffuse initialization phase. It essentially identifies the burn-in period that 
-        # should be discarded from your in-sample diagnostics.
-        
-        fitted = results.fittedvalues.iloc[n_burn:]
-        resid = results.resid.iloc[n_burn:]
+        fitted = results.fittedvalues.iloc[burn_in:]
+        resid = results.resid.iloc[burn_in:]
         
     elif model_type == 'ets':
         model = AutoETS(

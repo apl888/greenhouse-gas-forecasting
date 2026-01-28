@@ -276,8 +276,8 @@ def fit_mean_model(y,
         model = TBATS(**model_params)
         results = model.fit(y)
 
-        fitted = results.fittedvalues_
-        # fitted = results.predict(fh=y.index)
+        fh = np.arange(1, len(y) + 1)
+        fitted = results.predict(fh=fh)
         resid = y - fitted
 
     else:

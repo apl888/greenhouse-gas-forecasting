@@ -275,15 +275,13 @@ def fit_mean_model(y,
     elif model_type == 'tbats':
         model = TBATS(**model_params)
         results = model.fit(y)
-
-        fh = np.arange(1, len(y) + 1)
-        fitted = results.predict(fh=fh)
         
-        # restore index from RangeIndex create above
-        fitted = pd.Series(fitted.values, index=y.index)
+        # udr sktime's dedicated method for in-sample innovations
+        resid = model.predict_residuals()
         
-        resid = y - fitted
-
+        # derive fitted values from residuals
+        fitted = y - resid
+        
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
 

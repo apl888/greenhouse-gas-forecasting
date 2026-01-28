@@ -278,6 +278,10 @@ def fit_mean_model(y,
 
         fh = np.arange(1, len(y) + 1)
         fitted = results.predict(fh=fh)
+        
+        # restore index from RangeIndex create above
+        fitted = pd.Series(fitted.values, index=y.index)
+        
         resid = y - fitted
 
     else:

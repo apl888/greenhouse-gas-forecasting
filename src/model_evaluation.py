@@ -262,9 +262,6 @@ def fit_mean_model(y,
         
         fitted = results.fittedvalues.iloc[n_burn:]
         resid = results.resid.iloc[n_burn:]
-
-        # fitted = results.fittedvalues
-        # resid = results.resid
         
     elif model_type == 'ets':
         model = AutoETS(
@@ -283,7 +280,8 @@ def fit_mean_model(y,
         model = TBATS(**model_params)
         results = model.fit(y)
 
-        fitted = results.predict(fh=y.index)
+        fitted = results.fittedvalues_
+        # fitted = results.predict(fh=y.index)
         resid = y - fitted
 
     else:
@@ -293,7 +291,7 @@ def fit_mean_model(y,
         "model_type": model_type,
         "fitted_model": results,
         "fitted_values": fitted,
-        "residuals": pd.Series(resid, index=y.index)
+        "residuals": resid
     }
 
 # Example notebook usage:

@@ -363,7 +363,12 @@ def forecast_mean_model(fitted_model,
 # 3. Residual diagnostics (in + out-of-sample)
 # =========================================================
 
-def residual_diagnostics(residuals, title='', plot=True):
+def residual_diagnostics(
+    residuals, 
+    title='', 
+    plot=True,
+    return_results=False
+    ):
     """
     Model-agnostic residual diagnostics.
     Works for in-sample or out-of-sample residuals.

@@ -424,7 +424,15 @@ def residual_diagnostics(residuals, title='', plot=True):
         plt.tight_layout()
         plt.show()
 
-    return lb, jb_p, adf_p
+    results = {
+        'ljung_box'  : lb,
+        'jb_pvalue'  : jb_p,
+        'adf_pvalue' : adf_p,
+        'arch_pvalue': arch_p
+    }
+    
+    if return_results:
+        return results
 
 # Example notebook usage:
 #

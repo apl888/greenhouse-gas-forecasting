@@ -399,6 +399,7 @@ def residual_diagnostics(
     print(f"\nEngle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
 
     # --- Stationarity ---
+    adf_p = None
     if len(residuals) > 50:
         adf_p = adfuller(residuals, autolag='AIC')[1]
         print(f"\nADF p-value: {adf_p:.4f}")

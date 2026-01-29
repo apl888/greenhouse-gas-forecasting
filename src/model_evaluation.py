@@ -394,7 +394,7 @@ def residual_diagnostics(residuals, title='', plot=True):
     print('(H0: No ARCH effects (constant variance))')
     
     arch_stat, arch_p, _, _, = het_arch(residuals, nlags=52)
-    print(f'Engle's ARCH test (nlags=52) p-value: {arch_p:.4e}')
+    print(f"Engle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
 
     # --- Stationarity ---
     if len(residuals) > 50:

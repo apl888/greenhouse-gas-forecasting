@@ -389,12 +389,9 @@ def residual_diagnostics(residuals, title='', plot=True):
     for lag in lb.index:
         print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
         
-    # --- Conditional heteroscedasticity ---
-    print("Engle's ARCH Test (on squared residuals):")
-    print('(H0: No ARCH effects (constant variance))')
-    
+    # --- Conditional heteroscedasticity ---   
     arch_stat, arch_p, _, _, = het_arch(residuals, nlags=52)
-    print(f"Engle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
+    print(f"\nEngle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
 
     # --- Stationarity ---
     if len(residuals) > 50:

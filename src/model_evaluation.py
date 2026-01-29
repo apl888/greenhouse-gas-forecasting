@@ -405,6 +405,8 @@ def residual_diagnostics(
         print(f"\nADF p-value: {adf_p:.4f}")
 
     if plot:
+        plt.suptitle(f'{title} Residual Diagnostic Plots')
+        
         fig, axes = plt.subplots(3, 2, figsize=(12, 12))
         
         axes[0,0].plot(residuals)

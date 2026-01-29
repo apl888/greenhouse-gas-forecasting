@@ -32,7 +32,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.stats.diagnostic import acorr_ljungbox
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.graphics.tsaplots import plot_acf
 from statsmodels.api import qqplot
 from statsmodels.stats.stattools import jarque_bera
@@ -276,7 +276,7 @@ def fit_mean_model(y,
         model = TBATS(**model_params)
         results = model.fit(y)
         
-        # udr sktime's dedicated method for in-sample innovations
+        # udr sktime's dedicated method for in-sample one-step-ahead innovations
         resid = results.predict_residuals()
         
         # derive fitted values from residuals
@@ -388,6 +388,13 @@ def residual_diagnostics(residuals, title='', plot=True):
     print("\nLjung-Box p-values:")
     for lag in lb.index:
         print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
+        
+    # --- Conditional heteroscedasticity ---
+    print("Engle's ARCH Test (on squared residuals):")
+    print('(H0: No ARCH effects (constant variance))')
+    
+    arch_stat, arch_p, _, _, = het_arch(residuals, nlags=52)
+    print(f'Engle's ARCH test (nlags=52) p-value: {arch_p:.4e}')
 
     # --- Stationarity ---
     if len(residuals) > 50:
@@ -395,7 +402,8 @@ def residual_diagnostics(residuals, title='', plot=True):
         print(f"\nADF p-value: {adf_p:.4f}")
 
     if plot:
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        fig, axes = plt.subplots(3, 2, figsize=(12, 12))
+        
         axes[0,0].plot(residuals)
         axes[0,0].set_title('Residuals')
 
@@ -409,6 +417,12 @@ def residual_diagnostics(residuals, title='', plot=True):
         x = np.linspace(residuals.min(), residuals.max(), 200)
         axes[1,1].plot(x, stats.norm.pdf(x, residuals.mean(), residuals.std()))
         axes[1,1].set_title('Histogram')
+        
+        axes[2,0].plot(residuals**2)
+        axes[2,0].set_title('Squared Residuals')
+
+        plot_acf(residuals**2, lags=40, ax=axes[2,1])
+        axes[2,1].set_title('Squared Residual ACF')
 
         plt.tight_layout()
         plt.show()

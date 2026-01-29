@@ -407,7 +407,7 @@ def residual_diagnostics(
     if plot:       
         fig, axes = plt.subplots(3, 2, figsize=(12, 12))
         
-        plt.suptitle(f'{title} Residual Diagnostic Plots', fontsize=18)
+        plt.suptitle(f'\n{title} Residual Diagnostic Plots\n', fontsize=18)
         
         axes[0,0].plot(residuals)
         axes[0,0].set_title('Residuals')

@@ -472,7 +472,7 @@ def fit_garch(residuals,
     if verbose:
         logger.info(f"Fitting GARCH({p},{q})")
 
-    model = arch_model(residuals * 100, 
+    model = arch_model(residuals * 100,  # scaled up because residuals are small in magnitude
                        vol='GARCH', 
                        p=p, 
                        q=q, 

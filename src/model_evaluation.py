@@ -471,15 +471,20 @@ def fit_garch(residuals,
 
     if verbose:
         logger.info(f"Fitting GARCH({p},{q})")
+        
+    scale = residuals.std()               # keeps sigma(t) in the original units
+    resids_scaled = residuals / scale
 
-    model = arch_model(residuals * 100,  # scaled up because residuals are small in magnitude
+    model = arch_model(resids_scaled,
                        vol='GARCH', 
                        p=p, 
                        q=q, 
-                       dist=dist)
+                       dist=dist,
+                       rescale=False)
+    
     res = model.fit(disp='off')
 
-    return res
+    return res, scale
 
 # Example notebook usage:
 #

@@ -480,7 +480,7 @@ def fit_garch(residuals,
                        p=p, 
                        q=q, 
                        dist=dist,
-                       rescale=False)
+                       rescale=False)     # prevents arch from silently re-scaling again
     
     res = model.fit(disp='off')
 

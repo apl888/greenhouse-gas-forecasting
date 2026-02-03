@@ -370,10 +370,12 @@ def forecast_mean_model(fitted_package,
             
     # Sigma forecast (dynamic vs global)
     if fitted_package.get('garch_model') is not None:
+        g_res = fitted_package['garch_model']
+        
         # check if GARCH results exist
         if not hasattr(g_res, 'forecast'):
             raise ValueError("GARCH model in fitted_package doesn't have forecast method")
-        g_res = fitted_package['garch_model']
+        
         g_scale = fitted_package['garch_scale']
         # GARCH multi-step variance forecast
         g_fcst = g_res.forecast(horizon=horizon)

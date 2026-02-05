@@ -472,7 +472,7 @@ def fit_garch(residuals,
     if verbose:
         logger.info(f"Fitting GARCH({p},{q})")
         
-    scale = residuals.std()               # keeps sigma(t) in the original units
+    scale = residuals.std()               # keeps sigma_t in the original units
     resids_scaled = residuals / scale
 
     model = arch_model(resids_scaled,
@@ -884,7 +884,7 @@ def garch_adjusted_coverage(
     Adjust forecast intervals using GARCH conditional volatility.
     """
 
-    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] / 100.0
+    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] * scale
 
     z = stats.norm.ppf(1 - alpha / 2)
 

@@ -175,7 +175,7 @@ def horizon_squared_error(
 # =========================================================
 
 def crps_gaussian(y, mu, sigma):
-    '''
+    """
     Continuous Ranked Probability Score (CRPS)
     Closed-form CRPS for Gaussian predictive distribution.
 
@@ -188,7 +188,7 @@ def crps_gaussian(y, mu, sigma):
     Returns
     -------
     float : mean CRPS
-    '''
+    """
     y = np.asarray(y)
     mu = np.asarray(mu)
     sigma = np.maximum(np.asarray(sigma), 1e-8)
@@ -217,6 +217,41 @@ def crps_gaussian(y, mu, sigma):
 # )
 
 # =========================================================
+# PIT (Gaussian)
+# =========================================================
+
+def pit_gaussian(y, mu, sigma):
+    '''
+    Calculate the Probability Integral Transform (PIT) for a Gaussian distribution.
+
+    The PIT is the Value of the cumulative distribution function (CDF) 
+    evaluated at the observed value 'y'. For a well-calibrated model, 
+     the PIT values across a dataset should follow a Uniform(0, 1) distribution.
+
+    Parameters
+    ----------
+    y : float or array_like
+        The actual observed value(s).
+    mu : float or array_like
+        The mean (forecasted location) of the Gaussian distribution.
+    sigma : float or array_like
+        The standard deviation (forecasted scale) of the Gaussian 
+        distribution. Must be positive.
+
+    Returns
+    -------
+    pit : float or array_like
+        The probability integral transform value(s) in the range [0, 1].
+
+    Notes
+    -----
+    - If PIT values are clustered near 0 and 1 (U-shape), the model is under-dispersed.
+    - If PIT values are clustered near 0.5 (hump-shape), the model is over-dispersed.
+    '''
+    z = (y - mu) / sigma
+    return norm.cdf(z) 
+
+# =========================================================
 # 1. Mean model fitting (Abstraction layer)
 # =========================================================
 
@@ -226,14 +261,14 @@ def fit_mean_model(y,
                    exog=None, 
                    start_params=None,
                    verbose=False):
-    '''
-    Fits a mean model + optional GARCH and returns a fitted object.
+    """
+    Fits a mean model and returns a fitted object.
     Supported models: 'sarima', 'ets', 'tbats'
-    '''
-    if verbose:
-        logger.info(f'Fitting {model_type.upper()} model')
+    """
 
-    # standard mean model fitting
+    if verbose:
+        logger.info(f"Fitting {model_type.upper()} model")
+
     if model_type == 'sarima':
         model = SARIMAX(
             y,
@@ -276,7 +311,7 @@ def fit_mean_model(y,
         model = TBATS(**model_params)
         results = model.fit(y)
         
-        # use sktime's dedicated method for in-sample one-step-ahead innovations
+        # udr sktime's dedicated method for in-sample one-step-ahead innovations
         resid = results.predict_residuals()
         
         # derive fitted values from residuals
@@ -284,38 +319,12 @@ def fit_mean_model(y,
         
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
-    
-    # garch fitting
-    garch_res = None
-    garch_scale = 1.0
-    
-    if model_params.get('use_garch', False):
-        garch_params = model_params.get(
-            'garch_params',
-            {'p'   : 1,
-             'q'   : 1,
-             'dist': 'normal'})
-        
-        garch_scale = resid.std()
-        # scale residuals to help convergence
-        resids_scaled = resid / garch_scale
-        
-        am = arch_model(
-            resids_scaled,
-            vol='GARCH',
-            p=garch_params['p'],
-            q=garch_params['q'],
-            dist=garch_params['dist'],
-            rescale=False)
-        garch_res = am.fit(disp='off')
-        
+
     return {
-        'model_type'   : model_type,
-        'fitted_model' : results,     # mean model
-        'garch_model'  : garch_res,   # volatility model (none if not used)
-        'garch_scale'  : garch_scale,
-        'fitted_values': fitted,
-        'residuals'    : resid
+        "model_type": model_type,
+        "fitted_model": results,
+        "fitted_values": fitted,
+        "residuals": resid
     }
 
 # Example notebook usage:
@@ -338,81 +347,47 @@ def fit_mean_model(y,
 # 2. Forecasting wrapper
 # =========================================================
 
-def forecast_mean_model(fitted_package, 
+def forecast_mean_model(fitted_model, 
                         model_type, 
                         horizon, 
                         exog=None):
-    '''
-    Generates mean and volatility forecasts
-    resturns mean, sigma, and intervals
-    '''
-    # Input validation
-    if model_type not in ['sarima', 'ets', 'tbats']:
-        raise ValueError(f"model_type must be 'sarima', 'ets', or 'tbats', got {model_type}")
-    
-    if horizon <= 0:
-        raise ValueError(f"horizon must be positive, got {horizon}")
-    
-    required_keys = ['fitted_model', 'residuals']
-    for key in required_keys:
-        if key not in fitted_package:
-            raise ValueError(f"fitted_package missing required key: {key}")
-        
-    results = fitted_package['fitted_model']
-    
-    # mean forecast
-    if model_type == 'sarima':
-        mean_forecast = results.forecast(steps=horizon, exog=exog)
-    elif model_type in ['ets', 'tbats']:
-        if exog is not None:
-            warnings.warn(f'exog ignored for {model_type} model')
-        mean_forecast = results.predict(fh=np.arange(1, horizon + 1))
-            
-    # Sigma forecast (dynamic vs global)
-    if fitted_package.get('garch_model') is not None:
-        g_res = fitted_package['garch_model']
-        
-        # check if GARCH results exist
-        if not hasattr(g_res, 'forecast'):
-            raise ValueError("GARCH model in fitted_package doesn't have forecast method")
-        
-        g_scale = fitted_package['garch_scale']
-        # GARCH multi-step variance forecast
-        g_fcst = g_res.forecast(horizon=horizon)
-        # rescal back to original units
-        sigma = np.sqrt(g_fcst.variance.values[-1, :]) * g_scale
-        sigma = pd.Series(sigma, index=mean_forecast.index)  
-    else:
-        # global sigma, standard deviation of training residuals
-        global_std = fitted_package['residuals'].std()
-        sigma = pd.Series([global_std] * horizon, index=mean_forecast.index)
+    """
+    Generates forecasts + uncertainty.
+    """
 
-    # intervals (fixed 95% for compatibility)
-    lower = mean_forecast - 1.96 * sigma
-    upper = mean_forecast + 1.96 * sigma
-    intervals = pd.DataFrame({'lower': lower, 'upper': upper}, index=mean_forecast.index)
-    
-    return mean_forecast, sigma, intervals
+    if model_type == 'sarima':
+        fc = fitted_model.get_forecast(steps=horizon, exog=exog)
+        mean = fc.predicted_mean
+        var = fc.var_pred_mean
+        sigma = np.sqrt(var)
+        return mean, sigma, fc.conf_int()
+
+    elif model_type in ['ets', 'tbats']:
+        fh = np.arange(1, horizon + 1)
+        mean = fitted_model.predict(fh)
+
+        try:
+            intervals = fitted_model.predict_interval(fh, coverage=0.95)
+            sigma = (intervals.iloc[:,1] - intervals.iloc[:,0]) / (2 * 1.96)
+        except Exception:
+            sigma = None
+            intervals = None
+
+        return mean, sigma, intervals
 
 # Example notebook usage:
 #
-# fitted_package = fit_mean_model(
-#     y=train_data,
-#     model_type='sarima',
-#     model_params={'order': (1,1,1), 'use_garch': True}
-# )
-#
-# mean_forecast, sigma, intervals = forecast_mean_model(
-#     fitted_package=fitted_package,
+# mean, sigma, intervals = forecast_mean_model(
+#     fitted_model=fitted,
 #     model_type="sarima",
 #     horizon=len(y_test),
 #     exog=exog_test
 # )
 #
 # plt.plot(y_test.index, y_test, label="Observed")
-# plt.plot(mean_forecast.index, mean_forecast, label="Forecast")
+# plt.plot(mean.index, mean, label="Forecast")
 # plt.fill_between(
-#     mean_forecast.index,
+#     mean.index,
 #     intervals.iloc[:,0],
 #     intervals.iloc[:,1],
 #     alpha=0.3
@@ -532,7 +507,7 @@ def fit_garch(residuals,
     if verbose:
         logger.info(f"Fitting GARCH({p},{q})")
         
-    scale = residuals.std()               # keeps sigma(t) in the original units
+    scale = residuals.std()               # keeps sigma_t in the original units
     resids_scaled = residuals / scale
 
     model = arch_model(resids_scaled,
@@ -755,12 +730,12 @@ def rolling_origin_evaluation(
             completed_origins = ckpt['completed_origins']
             
         if verbose:
-            print(f'Loaded checkpoint with {len(completed_origins)} completed folds')
+            print(f"Loaded checkpoint with {len(completed_origins)} completed folds")
     
     origins = list(range(start_train_size, len(y) - H_MAX + 1, step)) # expanding window 
     n_folds_total = len(origins) 
     
-    pbar = tqdm(origins, desc='Rolling-origin folds', unit='fold')
+    pbar = tqdm(origins, desc="Rolling-origin folds", unit="fold")
     
     completed_count = len(completed_origins)
 
@@ -806,34 +781,26 @@ def rolling_origin_evaluation(
 
                 err = y_hat - y_true
                 naive_err = y_naive - y_true
-                
-                # probabilistic metrics
-                point_crps = crps_gaussian(y_true, y_hat, simga.iloc[h-1])
-                pit_val = stats.norm.cdf(y_true, loc=y_hat, scale=sigma.iloc[h-1])
 
                 # debug – first successful error only
                 if verbose and len(results) == 0:
-                    print('DEBUG err value:', err)
-                    print('DEBUG err type:', type(err))
-                    print('DEBUG err ndim:', np.ndim(err))
+                    print("DEBUG err value:", err)
+                    print("DEBUG err type:", type(err))
+                    print("DEBUG err ndim:", np.ndim(err))
 
                 results.append({
-                    'origin'     : y.index[t],
-                    'model'      : model_type,
-                    'horizon'    : h,
-                    'y_true'     : y_true,
-                    'y_pred'     : y_hat,
-                    'y_naive'    : y_naive,
-                    'error'      : err,
-                    'naive_error': naive_err,
-                    'abs_error'  : abs(err),
-                    'sq_error'   : err**2,
-                    'origin_idx' : t,
-                    'train_size' : len(y_train),
-                    'sigma'      : sigma.iloc[h-1],
-                    'crps'       : point_crps,
-                    'pit'        : pit_val,
-                    'sharpness'  : 1.96 * sigma.iloc[h-1] # 95% interval half-width
+                    "origin"     : y.index[t],
+                    "model"      : model_type,
+                    "horizon"    : h,
+                    "y_true"     : y_true,
+                    "y_pred"     : y_hat,
+                    "y_naive"    : y_naive,
+                    "error"      : err,
+                    "naive_error": naive_err,
+                    "abs_error"  : abs(err),
+                    "sq_error"   : err**2,
+                    "origin_idx" : t,
+                    "train_size" : len(y_train)
                 })
                 
             completed_origins.add(t)
@@ -952,7 +919,7 @@ def garch_adjusted_coverage(
     Adjust forecast intervals using GARCH conditional volatility.
     """
 
-    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] / 100.0
+    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] * scale
 
     z = stats.norm.ppf(1 - alpha / 2)
 
@@ -1044,3 +1011,96 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
 #     errors_B,
 #     loss="mae"
 # )
+
+# =========================================================
+# 11. Rolling CRPS
+# =========================================================
+
+def rolling_crps(
+    y,
+    model_type,
+    model_params,
+    variance_type="static",
+    variance_params=None,
+    exog=None,
+    start_train_size=156,
+    horizon=1,
+    step=1,
+):
+    records = []
+
+    for t in range(start_train_size, len(y) - horizon):
+
+        y_train = y.iloc[:t]
+        y_true = y.iloc[t + horizon - 1]
+
+        exog_train = exog.iloc[:t] if exog is not None else None
+        exog_test  = exog.iloc[t:t + horizon] if exog is not None else None
+
+        # ---- mean model ----
+        mean_fit = fit_mean_model(
+            y_train,
+            model_type,
+            model_params,
+            exog=exog_train
+        )
+
+        mu, _, _ = forecast_mean_model(
+            mean_fit["fitted_model"],
+            model_type,
+            horizon=horizon,
+            exog=exog_test
+        )
+        mu_h = mu.iloc[-1]
+
+        resid = mean_fit["residuals"].dropna()
+
+        # ---- variance model ----
+        if variance_type == "static":
+            sigma_h = resid.std(ddof=1)
+
+        elif variance_type == "garch":
+            garch_res, scale = fit_garch(
+                resid,
+                **(variance_params or {})
+            )
+            sigma_h = (
+                np.sqrt(
+                    garch_res.forecast(horizon=horizon)
+                             .variance.iloc[-1, -1]
+                ) * scale
+            )
+
+        else:
+            raise ValueError("Unknown variance_type")
+
+        records.append({
+            "origin": y.index[t],
+            "horizon": horizon,
+            "mu": mu_h,
+            "sigma": sigma_h,
+            "y_true": y_true,
+            "crps": crps_gaussian(y_true, mu_h, sigma_h),
+            "pit": pit_gaussian(y_true, mu_h, sigma_h),
+            "variance_model": variance_type,
+            "mean_model": model_type
+        })
+
+    return pd.DataFrame(records)
+
+# Example notebook usage
+#
+# dfs = []
+# for h in [1, 13, 26, 52]:
+#     dfs.append(
+#         rolling_crps(
+#             y=y,
+#             model_type="tbats",
+#             model_params=tbats_params,
+#             variance_type="garch",
+#             variance_params={"p": 1, "q": 1},
+#             horizon=h
+#         )
+#     )
+
+# df_all = pd.concat(dfs)

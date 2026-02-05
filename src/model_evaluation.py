@@ -1020,7 +1020,7 @@ def rolling_crps(
     y,
     model_type,
     model_params,
-    variance_type="static",
+    variance_type='static',
     variance_params=None,
     exog=None,
     start_train_size=156,

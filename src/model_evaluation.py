@@ -1024,67 +1024,65 @@ def rolling_crps(
     variance_params=None,
     exog=None,
     start_train_size=156,
-    horizon=1,
-    step=1,
+    horizons=(1,13,26,52),
+    step=13,
 ):
     records = []
+    
+    H_MAX = max(horizons)
 
-    for t in range(start_train_size, len(y) - horizon):
+    for t in range(start_train_size, len(y) - H_MAX, step):
 
         y_train = y.iloc[:t]
-        y_true = y.iloc[t + horizon - 1]
-
         exog_train = exog.iloc[:t] if exog is not None else None
-        exog_test  = exog.iloc[t:t + horizon] if exog is not None else None
+        exog_test  = exog.iloc[t:t + H_MAX] if exog is not None else None
 
-        # ---- mean model ----
+        # ---- fit the mean model once per origin ----
         mean_fit = fit_mean_model(
             y_train,
             model_type,
             model_params,
             exog=exog_train
         )
-
+        
         mu, _, _ = forecast_mean_model(
-            mean_fit["fitted_model"],
+            mean_fit['fitted_model'],
             model_type,
-            horizon=horizon,
+            horizon=H_MAX,
             exog=exog_test
         )
-        mu_h = mu.iloc[-1]
+        
+        resid = mean_fit['residuals'].dropna()
 
-        resid = mean_fit["residuals"].dropna()
+        # ---- variance model (fit once per origin) ----
+        if variance_type == 'static':
+            sigma_forecast = {h: resid.std(ddof=1) for h in horizons}
 
-        # ---- variance model ----
-        if variance_type == "static":
-            sigma_h = resid.std(ddof=1)
-
-        elif variance_type == "garch":
-            garch_res, scale = fit_garch(
-                resid,
-                **(variance_params or {})
-            )
-            sigma_h = (
-                np.sqrt(
-                    garch_res.forecast(horizon=horizon)
-                             .variance.iloc[-1, -1]
-                ) * scale
-            )
+        elif variance_type == 'garch':
+            garch_res, scale = fit_garch(resid, **(variance_params or {}))
+            var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
+            sigma_forecast = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
 
         else:
             raise ValueError("Unknown variance_type")
+        
+        # ---- score all horizons ----
+        for h in horizons:
+            y_true = y.iloc[t + h - 1]
+            mu_h = mu.iloc[h - 1]
+            sigma_h = sigma_forecast[h]
 
-        records.append({
-            "origin": y.index[t],
-            "horizon": horizon,
-            "mu": mu_h,
-            "sigma": sigma_h,
-            "y_true": y_true,
-            "crps": crps_gaussian(y_true, mu_h, sigma_h),
-            "pit": pit_gaussian(y_true, mu_h, sigma_h),
-            "variance_model": variance_type,
-            "mean_model": model_type
-        })
+            records.append({
+                "origin": y.index[t],
+                "horizon": h,
+                "mu": mu_h,
+                "sigma": sigma_h,
+                "y_true": y_true,
+                "crps": crps_gaussian(y_true, mu_h, sigma_h),
+                "pit": pit_gaussian(y_true, mu_h, sigma_h),
+                "variance_model": variance_type,
+                "mean_model": model_type
+            })
 
     return pd.DataFrame(records)
 

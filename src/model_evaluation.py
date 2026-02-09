@@ -1102,3 +1102,31 @@ def rolling_crps(
 #     )
 
 # df_all = pd.concat(dfs)
+
+# =========================================================
+# 12. Interval coverage
+# =========================================================
+
+def interval_coverage(df, level=0.95):
+    '''
+    Computes empirical coverage for Gaussian prediction intervals
+    
+    parameters
+    ----------
+    df: DataFrame
+        output of rolling_crps()
+    leval: float
+        nominal coverage level (e.g. 0.80 or 0.95)
+        
+    returns
+    -------
+    coverate: float
+        empirical coverage rate
+    '''
+    z = norm.pdf(0.5 + level / 2)
+    
+    lower = df['mu'] - z * df['sigma']
+    upper = df['mu'] + z * df['sigma'] 
+    
+    covered = (df['y_true'] >= lower) & (df['y_true'] <= upper)
+    return covered.mean() 

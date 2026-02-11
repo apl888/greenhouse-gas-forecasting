@@ -1020,7 +1020,7 @@ def rolling_crps(
     y,
     model_type,
     model_params,
-    variance_type='static',
+    variance_type='static',  # 'static' or 'garch'
     variance_params=None,
     exog=None,
     start_train_size=156,
@@ -1032,11 +1032,12 @@ def rolling_crps(
 
     for t in range(start_train_size, len(y) - H_MAX, step):
 
+        # split data
         y_train = y.iloc[:t]
         exog_train = exog.iloc[:t] if exog is not None else None
         exog_test  = exog.iloc[t:t + H_MAX] if exog is not None else None
 
-        # ---- fit the mean model once per origin ----
+        # fit the mean model once per origin
         mean_fit = fit_mean_model(
             y_train,
             model_type,
@@ -1044,7 +1045,7 @@ def rolling_crps(
             exog=exog_train
         )
         
-        mu, sigma_state, _ = forecast_mean_model(
+        mu, sigma_native, _ = forecast_mean_model(
             mean_fit['fitted_model'],
             model_type,
             horizon=H_MAX,
@@ -1054,39 +1055,39 @@ def rolling_crps(
         # sigma_state - mean model forecast uncertainty (state evolution + observation noise), assuming Gaussian innovations
         
         resid = mean_fit['residuals'].dropna()
+        resid_var = resid.var(ddof=1)
 
-        # ---- variance model (fit once per origin) ----
+        # variance model (fit once per origin)
         if variance_type == 'static':
-            # sigma_forecast = {h: resid.std(ddof=1) for h in horizons}
-            sigma_innov = {h: resid.std(ddof=1) for h in horizons}
+            # constant innovation variance
+            sigma_innov = {h: np.sqrt(resid_var) for h in horizons}
 
         elif variance_type == 'garch':
             garch_res, scale = fit_garch(resid, **(variance_params or {}))
             var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            # sigma_forecast = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
             sigma_innov = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
             
         else:
-            raise ValueError("Unknown variance_type")
+            raise ValueError('Unknown variance_type')
         
         # ---- score all horizons ----
         for h in horizons:
-            y_true = y.iloc[t + h - 1]
-            mu_h = mu.iloc[h - 1]
+            y_true = float(y.iloc[t + h - 1])
+            mu_h = float(mu.iloc[h - 1])
+            
             # mean model uncertainty (state-space)
-            # sigma_h = sigma_forecast[h]
-            if sigma_state is not None:
-                sigma_state_h = float(sigma_state.iloc[h - 1])
-            else:
-                sigma_state_h = 0.0
-                
-            # innovation uncertainty (static/global or GARCH)
+            if sigma_native is None:
+                raise RuntimeError('Mean model did not return forecast uncertainty')
+            
+            sigma_native_h = float(sigma_native.iloc[h - 1])
+            
+            # innovation variance adjustment
             sigma_innov_h = float(sigma_innov[h])
             
-            # total predictive uncertainty
-            sigma_h = np.sqrt(sigma_state_h**2 + sigma_innov_h**2)
+            # total predictive uncertainty (sigma)
+            ratio = np.sqrt(sigma_innov_h**2 / resid_var) if resid_var > 0 else 1.0
+            sigma_h = sigma_native_h * ratio
             
-
             records.append({
                 "origin": y.index[t],
                 "horizon": h,

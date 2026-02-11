@@ -1028,7 +1028,6 @@ def rolling_crps(
     step=13,
 ):
     records = []
-    
     H_MAX = max(horizons)
 
     for t in range(start_train_size, len(y) - H_MAX, step):
@@ -1045,24 +1044,28 @@ def rolling_crps(
             exog=exog_train
         )
         
-        mu, _, _ = forecast_mean_model(
+        mu, sigma_state, _ = forecast_mean_model(
             mean_fit['fitted_model'],
             model_type,
             horizon=H_MAX,
             exog=exog_test
         )
+        # mu - multi-step conditional mean forecast
+        # sigma_state - mean model forecast uncertainty (state evolution + observation noise), assuming Gaussian innovations
         
         resid = mean_fit['residuals'].dropna()
 
         # ---- variance model (fit once per origin) ----
         if variance_type == 'static':
-            sigma_forecast = {h: resid.std(ddof=1) for h in horizons}
+            # sigma_forecast = {h: resid.std(ddof=1) for h in horizons}
+            sigma_innov = {h: resid.std(ddof=1) for h in horizons}
 
         elif variance_type == 'garch':
             garch_res, scale = fit_garch(resid, **(variance_params or {}))
             var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            sigma_forecast = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
-
+            # sigma_forecast = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
+            sigma_innov = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
+            
         else:
             raise ValueError("Unknown variance_type")
         
@@ -1070,7 +1073,19 @@ def rolling_crps(
         for h in horizons:
             y_true = y.iloc[t + h - 1]
             mu_h = mu.iloc[h - 1]
-            sigma_h = sigma_forecast[h]
+            # mean model uncertainty (state-space)
+            # sigma_h = sigma_forecast[h]
+            if sigma_state is not None:
+                sigma_state_h = float(sigma_state.iloc[h - 1])
+            else:
+                sigma_state_h = 0.0
+                
+            # innovation uncertainty (static/global or GARCH)
+            sigma_innov_h = float(sigma_innov[h])
+            
+            # total predictive uncertainty
+            sigma_h = np.sqrt(sigma_state_h**2 + sigma_innov_h**2)
+            
 
             records.append({
                 "origin": y.index[t],
@@ -1080,8 +1095,8 @@ def rolling_crps(
                 "y_true": y_true,
                 "crps": crps_gaussian(y_true, mu_h, sigma_h),
                 "pit": pit_gaussian(y_true, mu_h, sigma_h),
-                "variance_model": variance_type,
-                "mean_model": model_type
+                "mean_model": model_type,
+                "variance_model": variance_type
             })
 
     return pd.DataFrame(records)

@@ -1109,6 +1109,7 @@ def rolling_crps(
                 'y_true'        : y_true,
                 'ratio'         : ratio,
                 'inflation'     : inflation,
+                'alpha'         : variance_inflation_alpha,
                 'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
                 'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
                 'mean_model'    : model_type,

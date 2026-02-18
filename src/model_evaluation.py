@@ -1015,6 +1015,9 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
 # =========================================================
 # 11. Rolling CRPS
 # =========================================================
+# mean model --> mu, sigma_native
+# innovation model --> sigma_innov
+# post-model calibration --> variance_inflation_alpha
 
 def rolling_crps(
     y,
@@ -1026,6 +1029,7 @@ def rolling_crps(
     start_train_size=156,
     horizons=(1,13,26,52),
     step=13,
+    variance_inflation_alpha=None
 ):
     records = []
     H_MAX = max(horizons)
@@ -1086,18 +1090,29 @@ def rolling_crps(
             
             # total predictive uncertainty (sigma)
             ratio = np.sqrt(sigma_innov_h**2 / resid_var) if resid_var > 0 else 1.0
-            sigma_h = sigma_native_h * ratio
+            
+            if variance_inflation_alpha is None:
+                # leave h=1 unchanged
+                inflation = 1.0              
+            else:
+                inflation = np.sqrt(1.0 + variance_inflation_alpha * (h - 1))
+                
+            inflation = min(inflation, 5.0)
+            sigma_h = sigma_native_h * ratio * inflation
             
             records.append({
-                "origin": y.index[t],
-                "horizon": h,
-                "mu": mu_h,
-                "sigma": sigma_h,
-                "y_true": y_true,
-                "crps": crps_gaussian(y_true, mu_h, sigma_h),
-                "pit": pit_gaussian(y_true, mu_h, sigma_h),
-                "mean_model": model_type,
-                "variance_model": variance_type
+                'origin'        : y.index[t],
+                'horizon'       : h,
+                'mu'            : mu_h,
+                'sigma'         : sigma_h,
+                'sigma_native'  : sigma_native_h,
+                'y_true'        : y_true,
+                'ratio'         : ratio,
+                'inflation'     : inflation,
+                'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
+                'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
+                'mean_model'    : model_type,
+                'variance_model': variance_type
             })
 
     return pd.DataFrame(records)

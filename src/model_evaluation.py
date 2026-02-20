@@ -1155,7 +1155,7 @@ def interval_coverage(df, level=0.95):
     coverate: float
         empirical coverage rate
     '''
-    z = norm.pdf(0.5 + level / 2)
+    z = norm.ppf(0.5 + level / 2)
     
     lower = df['mu'] - z * df['sigma']
     upper = df['mu'] + z * df['sigma'] 

@@ -22,7 +22,6 @@
 
 import numpy as np
 import pandas as pd
-import warnings
 import logging
 import time
 import os
@@ -33,10 +32,10 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
-from statsmodels.graphics.tsaplots import plot_acf
-from statsmodels.api import qqplot
 from statsmodels.stats.stattools import jarque_bera
 from statsmodels.tsa.stattools import adfuller
+from statsmodels.graphics.tsaplots import plot_acf
+from statsmodels.graphics.gofplots import qqplot
 
 from sktime.forecasting.tbats import TBATS
 from sktime.forecasting.ets import AutoETS
@@ -51,6 +50,14 @@ from scipy.stats import norm
 # ---------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+if not logger.hasHandlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # =========================================================
 # Metric helpers (standardized across models)
@@ -136,39 +143,6 @@ def seasonal_naive_forecast(y_train, horizon, sp):
 # )
 #
 # naive_rmse = rmse(y_test, y_naive)
-
-# =========================================================
-# Horizon-specific metrics
-# =========================================================
-
-def horizon_squared_error(
-    y_true,
-    y_pred,
-    horizons=(1, 13, 26, 52)
-):
-    """
-    Squared error at specific horizons.
-    RMSE must be computed after aggregation across origins or folds.
-    """
-    results = {}
-    for h in horizons:
-        idx = h - 1
-        if idx < len(y_true):
-            err = y_true.iloc[idx] - y_pred.iloc[idx]
-            results[h] = err ** 2
-    return results
-
-# Example notebook usage:
-#
-# se_by_horizon = horizon_squared_error(
-#     y_test,
-#     y_pred,
-#     horizons=(1, 13, 26, 52)
-# )
-#
-# # NOTE:
-# # These squared errors should be aggregated across folds/origins
-# # before taking sqrt to compute RMSE_h
 
 # =========================================================
 # CRPS (Gaussian)
@@ -270,6 +244,8 @@ def fit_mean_model(y,
         logger.info(f"Fitting {model_type.upper()} model")
 
     if model_type == 'sarima':
+        if 'trend' not in model_params:
+            raise ValueError("Explicit trend must be specified for SARIMA")
         model = SARIMAX(
             y,
             exog=exog,
@@ -279,120 +255,83 @@ def fit_mean_model(y,
             enforce_stationarity=model_params.get('enforce_stationarity', True),
             enforce_invertibility=model_params.get('enforce_invertibility', True)
         )
+
         results = model.fit(
             start_params=start_params,
             disp=False,
             maxiter=model_params.get('maxiter', 300)
         )
-        burn_in = max(
-            model_params['order'][1],
-            model_params['order'][0] + model_params['order'][2]
-        )
-        
-        burn_in = max(burn_in, 5)
-        
-        fitted = results.fittedvalues.iloc[burn_in:]
-        resid = results.resid.iloc[burn_in:]
-        
+
+        resid = results.resid.dropna()
+        fitted_vals = results.fittedvalues.loc[resid.index]
+
     elif model_type == 'ets':
-        model = AutoETS(
-            error=model_params['error'],
-            trend=model_params['trend'],
-            seasonal=model_params['seasonal'],
-            sp=model_params.get('sp', None),
-            initialization_method=model_params.get('initialization_method', 'heuristic')
-        )
+        model = AutoETS(**model_params)
         results = model.fit(y)
 
-        fitted = results.fittedvalues
-        resid = results.resid
+        resid = results.resid.dropna()
+        fitted_vals = results.fittedvalues.loc[resid.index]
 
     elif model_type == 'tbats':
         model = TBATS(**model_params)
         results = model.fit(y)
-        
-        # udr sktime's dedicated method for in-sample one-step-ahead innovations
-        resid = results.predict_residuals()
-        
-        # derive fitted values from residuals
-        fitted = y - resid
-        
+
+        resid = results.predict_residuals().dropna()
+        fitted_vals = y.loc[resid.index] - resid
+
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
     return {
         "model_type": model_type,
-        "fitted_model": results,
-        "fitted_values": fitted,
-        "residuals": resid
+        "results": results,
+        "residuals": resid,
+        "fitted_values": fitted_vals
     }
-
-# Example notebook usage:
-#
-# sarima_params = {
-#     "order": (1,1,1),
-#     "seasonal_order": (1,1,1,52),
-#     "trend": "n"
-# }
-#
-# fitted = fit_mean_model(
-#     y=y_train,
-#     model_type="sarima",
-#     model_params=sarima_params,
-#     exog=exog_train,
-#     verbose=True
-# )
 
 # =========================================================
 # 2. Forecasting wrapper
 # =========================================================
 
-def forecast_mean_model(fitted_model, 
-                        model_type, 
-                        horizon, 
-                        exog=None):
-    """
-    Generates forecasts + uncertainty.
-    """
+def forecast_mean_model(
+    fitted, 
+    horizon, 
+    exog=None
+    ):
+    '''
+    Generate forecasts and predictive uncertainty.
+    Returns dict with mean, sigma, intervals.
+    '''
+
+    model_type = fitted['model_type']
+    results = fitted['results']
 
     if model_type == 'sarima':
-        fc = fitted_model.get_forecast(steps=horizon, exog=exog)
+        fc = results.get_forecast(steps=horizon, exog=exog)
         mean = fc.predicted_mean
         var = fc.var_pred_mean
         sigma = np.sqrt(var)
-        return mean, sigma, fc.conf_int()
+        intervals = fc.conf_int()
 
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
-        mean = fitted_model.predict(fh)
+        mean = results.predict(fh)
 
         try:
-            intervals = fitted_model.predict_interval(fh, coverage=0.95)
-            sigma = (intervals.iloc[:,1] - intervals.iloc[:,0]) / (2 * 1.96)
+            intervals = results.predict_interval(fh, coverage=0.95)
+            sigma = (intervals.iloc[:, 1] - intervals.iloc[:, 0]) / (2 * 1.96)
         except Exception:
-            sigma = None
+            sigma = pd.Series(np.nan, index=mean.index)
             intervals = None
 
-        return mean, sigma, intervals
+    else:
+        raise ValueError('Unsupported model type')
 
-# Example notebook usage:
-#
-# mean, sigma, intervals = forecast_mean_model(
-#     fitted_model=fitted,
-#     model_type="sarima",
-#     horizon=len(y_test),
-#     exog=exog_test
-# )
-#
-# plt.plot(y_test.index, y_test, label="Observed")
-# plt.plot(mean.index, mean, label="Forecast")
-# plt.fill_between(
-#     mean.index,
-#     intervals.iloc[:,0],
-#     intervals.iloc[:,1],
-#     alpha=0.3
-# )
-# plt.legend()
+    return {
+        'mean': pd.Series(mean),
+        'sigma': pd.Series(sigma),
+        'intervals': intervals
+    }
 
 # =========================================================
 # 3. Residual diagnostics (in + out-of-sample)
@@ -407,6 +346,27 @@ def residual_diagnostics(
     """
     Model-agnostic residual diagnostics.
     Works for in-sample or out-of-sample residuals.
+    
+    Returns
+    -------
+    dict or None
+        If return_results=True, returns a dictionary with keys:
+        - 'ljung_box' : DataFrame of Ljung-Box test results
+        - 'jb_pvalue' : Jarque-Bera p-value
+        - 'adf_pvalue': ADF test p-value (or None if insufficient data)
+        - 'arch_pvalue': Engle's ARCH test p-value
+
+    Notes
+    -----
+    The plots include:
+    - Time series of residuals
+    - ACF of residuals (40 lags)
+    - Q-Q plot against normal distribution
+    - Histogram with fitted normal density
+    - Squared residuals time series
+    - ACF of squared residuals (40 lags)
+
+    The ADF test requires at least 50 observations; otherwise p-value is None.
     """
 
     print(f"\n=== Residual Diagnostics: {title} ===")
@@ -430,7 +390,7 @@ def residual_diagnostics(
         print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
         
     # --- Conditional heteroscedasticity ---   
-    arch_stat, arch_p, _, _, = het_arch(residuals, nlags=52)
+    arch_stat, arch_p, _, _ = het_arch(residuals, nlags=52)
     print(f"\nEngle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
 
     # --- Stationarity ---
@@ -502,6 +462,33 @@ def fit_garch(residuals,
               verbose=False):
     """
     Fits a GARCH(p,q) model to residuals.
+    
+    Parameters
+    ----------
+    residuals : array-like
+        Residuals from a mean model (e.g., y_train - fitted).
+    p : int, default=1
+        GARCH lag order for the variance term.
+    q : int, default=1
+        ARCH lag order for the squared residual term.
+    dist : {'normal', 't', 'skewt'}, default='normal'
+        Conditional distribution of the standardized residuals.
+    verbose : bool, default=False
+        If True, log an info message.
+
+    Returns
+    -------
+    result : ARCHModelResult
+        Fitted GARCH model result from `arch` package.
+    scale : float
+        Standard deviation used to scale residuals before fitting.
+        Multiply conditional volatilities by `scale` to return to original units.
+
+    Notes
+    -----
+    The function scales the residuals by their standard deviation before fitting
+    to keep parameters well-behaved. The returned `scale` should be used to
+    rescale forecasted variances/volatilities.
     """
 
     if verbose:
@@ -536,169 +523,32 @@ def fit_garch(residuals,
 # garch_res.summary()
 
 # =========================================================
-# 5. TimeSeriesSplit cross-validation (metrics only)
+# 7. Rolling-origins generator
 # =========================================================
 
-def evaluate_models_tscv(
-    y,
-    model_type,
-    model_params,
-    exog=None,
-    sp=None,
-    n_splits=5,
-    test_size=52,
-    gap=13,
-    verbose=False
-):
-    """
-    TimeSeriesSplit cross-validation using standardized metrics.
-    Use for hyperparameter screening and tuning.
-    """
-    tscv = TimeSeriesSplit(
-        n_splits=n_splits,
-        test_size=test_size,
-        gap=gap
-    )
+def rolling_origins(y, exog, start_train_size, H_MAX, step):
+    '''
+    Generator for expanding-window rolling origins.
+    Yields (t, y_train, y_test, exog_train, exog_test)
+    Use in rolling_origins_evaluation() and rolling_crps()
+    '''
 
-    rows = []
+    for t in range(start_train_size, len(y) - H_MAX + 1, step):
 
-    for fold, (train_idx, test_idx) in enumerate(tscv.split(y)):
+        y_train = y.iloc[:t]
+        y_test  = y.iloc[t:t + H_MAX]
 
-        y_train = y.iloc[train_idx]
-        y_test  = y.iloc[test_idx]
+        if exog is not None:
+            exog_train = exog.iloc[:t]
+            exog_test  = exog.iloc[t:t + H_MAX]
+        else:
+            exog_train = None
+            exog_test  = None
 
-        exog_train = exog.iloc[train_idx] if exog is not None else None
-        exog_test  = exog.iloc[test_idx] if exog is not None else None
-
-        try:
-            fitted = fit_mean_model(
-                y_train,
-                model_type,
-                model_params,
-                exog=exog_train,
-                verbose=verbose
-            )
-
-            mean, sigma, intervals = forecast_mean_model(
-                fitted,
-                model_type,
-                horizon=len(y_test),
-                exog=exog_test
-            )
-
-            metrics = evaluate_forecast(
-                y_train=y_train,
-                y_test=y_test,
-                y_pred=mean,
-                sp=sp,
-                intervals=intervals,
-                sigma=sigma
-            )
-
-            metrics["fold"] = fold + 1
-            metrics["model"] = model_type
-
-            rows.append(metrics)
-
-        except Exception as e:
-            if verbose:
-                logger.warning(f"Fold {fold+1} failed: {e}")
-
-    return pd.DataFrame(rows)
-
-# Example notebook usage:
-#
-# cv_results = evaluate_models_tscv(
-#     y=y,
-#     model_type="ets",
-#     model_params={"sp": 52, "trend": "add"},
-#     sp=52,
-#     n_splits=5,
-#     test_size=52,
-#     gap=13
-# )
-#
-# cv_results.groupby("model").mean()
-
+        yield t, y_train, y_test, exog_train, exog_test
+        
 # =========================================================
-# 6. Unified model evaluation (standard output)
-# =========================================================
-
-def evaluate_forecast(
-    y_train,
-    y_test,
-    y_pred,
-    *,
-    sp=None,
-    intervals=None,
-    sigma=None,
-    horizons=(1, 13, 26, 52)
-):
-    """
-    Standardized evaluation across all models.
-    """
-
-    results = {}
-
-    # --- Core accuracy ---
-    results["RMSE"] = rmse(y_test, y_pred)
-    results["MAE"]  = mae(y_test, y_pred)
-    results["NSE"]  = nash_sutcliffe_efficiency(y_test, y_pred, y_train)
-
-    # --- Horizon-specific ---
-    results["Horizon_SE"] = horizon_squared_error(
-        y_test,
-        y_pred,
-        horizons=horizons
-    )
-    
-    # --- CRPS score ---
-    if sigma is not None:
-        results["CRPS"] = crps_gaussian(y_test, y_pred, sigma)
-    else:
-        results["CRPS"] = np.nan
-
-    # --- Seasonal naive benchmark ---
-    if sp is not None:
-        y_naive = seasonal_naive_forecast(
-            y_train=y_train,
-            horizon=len(y_test),
-            sp=sp
-        )
-        results["Naive_RMSE"] = rmse(y_test, y_naive)
-        results["Skill_vs_Naive"] = skill_vs_naive(
-            y_test,
-            y_pred,
-            y_naive
-        )
-
-    # --- Interval coverage ---
-    if intervals is not None:
-        y = y_test.values
-        lower = intervals.iloc[:, 0].values
-        upper = intervals.iloc[:, 1].values
-
-        results["Interval_Coverage"] = np.mean(
-            (y >= lower) & (y <= upper)
-        )
-
-    return results
-
-# Example notebook usage:
-#
-# metrics = evaluate_forecast(
-#     y_train=y_train,
-#     y_test=y_test,
-#     y_pred=mean,
-#     sp=52,
-#     intervals=intervals,
-#     sigma=sigma
-# )
-#
-# metrics
-
-# =========================================================
-# 7. Rolling-origin (walk-forward) evaluation
+# 8. Rolling-origin (walk-forward) evaluation
 # =========================================================
 
 def rolling_origin_evaluation(
@@ -707,49 +557,48 @@ def rolling_origin_evaluation(
     model_params,
     exog=None,
     start_train_size=156,
-    H_MAX=52,
-    eval_horizons=(1, 13, 26, 52),
+    horizons=(1, 13, 26, 52),
     step=13,
     sp=52,
     checkpoint_path=None,
+    random_state=None,
     verbose=False
 ):
-    """
-    Rolling-origin evaluation using expanding window.
+    '''
+    Rolling-origin evaluation using expanding window (point forecasts).
     Returns one record per (origin, horizon).
-    """
+    
+    y_train: np.ndarray
+    '''
     start_time = time.time()
     
-    results = []
+    records = []
+    H_MAX = max(horizons)
     
     completed_origins = set()  
     if checkpoint_path and os.path.exists(checkpoint_path):
         with open(checkpoint_path, 'rb') as f:
             ckpt = pickle.load(f)
-            results = ckpt['results']
+            records = ckpt['records']
             completed_origins = ckpt['completed_origins']
             
         if verbose:
-            print(f"Loaded checkpoint with {len(completed_origins)} completed folds")
+            print(f'Loaded checkpoint with {len(completed_origins)} completed folds')
     
-    origins = list(range(start_train_size, len(y) - H_MAX + 1, step)) # expanding window 
+    origins = range(start_train_size, len(y) - H_MAX + 1, step)    # expanding window 
     n_folds_total = len(origins) 
     
-    pbar = tqdm(origins, desc="Rolling-origin folds", unit="fold")
+    # initialize the rolling_origins() generator 
+    gen = rolling_origins(y, exog, start_train_size, H_MAX, step)
+    
+    pbar = tqdm(gen, total=n_folds_total, desc='Rolling-origin folds', unit='fold')
     
     completed_count = len(completed_origins)
 
-    for t in pbar:
+    for t, y_train, y_test, exog_train, exog_test in pbar:
         
         if t in completed_origins:
-            pbar.update(0)
             continue
-
-        y_train = y.iloc[:t]
-        y_test  = y.iloc[t:t + H_MAX]
-
-        exog_train = exog.iloc[:t] if exog is not None else None
-        exog_test  = exog.iloc[t:t + H_MAX] if exog is not None else None
 
         try:
             fitted = fit_mean_model(
@@ -760,47 +609,48 @@ def rolling_origin_evaluation(
                 verbose=verbose
             )
             
-            mean, sigma, intervals = forecast_mean_model(
+            fc = forecast_mean_model(
                 fitted,
-                model_type,
                 horizon=H_MAX,
                 exog=exog_test
             )
             
-            for h in eval_horizons:
-                y_hat = mean.iloc[h - 1]
+            mean = fc['mean']
+            
+            for h in horizons:
                 y_true = y_test.iloc[h - 1]
+                y_pred = mean.iloc[h - 1]
 
                 # seasonal naive
                 naive_fcst = seasonal_naive_forecast(
                     y_train=y_train.values,
                     horizon=h,
-                    sp=52
+                    sp=sp
                 )
                 y_naive = naive_fcst[h - 1]
 
-                err = y_hat - y_true
+                err = y_pred - y_true
                 naive_err = y_naive - y_true
 
                 # debug – first successful error only
-                if verbose and len(results) == 0:
-                    print("DEBUG err value:", err)
-                    print("DEBUG err type:", type(err))
-                    print("DEBUG err ndim:", np.ndim(err))
+                if verbose and len(records) == 0:
+                    print('DEBUG err value:', err)
+                    print('DEBUG err type:', type(err))
+                    print('DEBUG err ndim:', np.ndim(err))
 
-                results.append({
-                    "origin"     : y.index[t],
-                    "model"      : model_type,
-                    "horizon"    : h,
-                    "y_true"     : y_true,
-                    "y_pred"     : y_hat,
-                    "y_naive"    : y_naive,
-                    "error"      : err,
-                    "naive_error": naive_err,
-                    "abs_error"  : abs(err),
-                    "sq_error"   : err**2,
-                    "origin_idx" : t,
-                    "train_size" : len(y_train)
+                records.append({
+                    'origin'     : y.index[t],
+                    'origin_idx' : t,
+                    'horizon'    : h,
+                    'model'      : model_type,
+                    'y_true'     : y_true,
+                    'y_pred'     : y_pred,
+                    'y_naive'    : y_naive,
+                    'error'      : err,
+                    'naive_error': naive_err,
+                    'abs_error'  : abs(err),
+                    'sq_error'   : err**2,
+                    'train_size' : len(y_train)
                 })
                 
             completed_origins.add(t)
@@ -810,8 +660,8 @@ def rolling_origin_evaluation(
                 with open(checkpoint_path, 'wb') as f:
                     pickle.dump(
                         {
-                            "completed_origins": completed_origins,
-                            "results"          : results
+                            'completed_origins': completed_origins,
+                            'records'          : records
                         },
                         f
                     )
@@ -822,15 +672,19 @@ def rolling_origin_evaluation(
             eta = avg_per_fold * (n_folds_total - completed_count)
                 
             pbar.set_postfix(
-                elapsed_min=f"{elapsed_time/60:.2f}",
-                eta_min=f"{eta/60:.2f}"
+                elapsed_min=f'{elapsed_time/60:.2f}',
+                eta_min=f'{eta/60:.2f}'
             )
 
         except Exception as e:
-            tqdm.write(f"Fold failed at t={t}: {e}")
+            tqdm.write(f'Fold failed at t={t}: {e}')
+            if verbose:
+                import traceback
+                traceback.print_exc()                         # prints full traceback to stderr
+                # logger.exception(f"Fold failed at t={t}")   # alternative approach to debugging
             continue
 
-    return results
+    return pd.DataFrame(records)
 
 # Example notebook usage:
 #
@@ -843,8 +697,7 @@ def rolling_origin_evaluation(
 #         "trend": "n"
 #     },
 #     start_train_size=156,
-#     H_MAX=52,
-#     eval_horizons=(1, 13, 26, 52),
+#     horizons=(1, 13, 26, 52),
 #     step=13
 # )
 #
@@ -863,78 +716,191 @@ def rolling_origin_evaluation(
 # summary
 
 # =========================================================
-# 8. Results aggregation / comparison
+# 9. Rolling CRPS
 # =========================================================
+# mean model --> mu, sigma_native
+# innovation model --> sigma_innov
+# post-model calibration --> variance_inflation_alpha
 
-def summarize_evaluations(results_list):
-    """
-    Converts a list of evaluation dicts into a clean DataFrame.
-    Designed for comparing models AFTER optimization.
-    """
+def rolling_crps(
+    y,
+    model_type,
+    model_params,
+    variance_type='static',  # 'static' or 'garch'
+    variance_params=None,
+    exog=None,
+    start_train_size=156,
+    horizons=(1,13,26,52),
+    step=13,
+    variance_inflation_alpha=None,
+    max_inflation=5.0,
+    random_state=None,
+    verbose=False
+):
 
-    rows = []
+    records = []
+    H_MAX = max(horizons)
 
-    for res in results_list:
-        row = {
-            "model"            : res.get("model"),
-            "origin"           : res.get("origin"),
-            "RMSE"             : res.get("RMSE"),
-            "MAE"              : res.get("MAE"),
-            "NSE"              : res.get("NSE"),
-            "Skill_vs_Naive"   : res.get("Skill_vs_Naive"),
-            "Interval_Coverage": res.get("Interval_Coverage")
-        }
+    for t, y_train, y_test, exog_train, exog_test in rolling_origins(
+        y, exog, start_train_size, H_MAX, step):
 
-        # Flatten horizon RMSE
-        for h, se in res.get("Horizon_SE", {}).items():
-            row[f"RMSE_h{h}"] = np.sqrt(se)
+        # fit the mean model once per origin
+        fitted = fit_mean_model(
+            y_train,
+            model_type,
+            model_params,
+            exog=exog_train
+        )
+        
+        fc = forecast_mean_model(
+            fitted,
+            horizon=H_MAX,
+            exog=exog_test
+        )
 
-        rows.append(row)
+        mu = fc['mean']
+        sigma_native = fc['sigma']
+        
+        resid = fitted['residuals']
+        resid_var = resid.var(ddof=1)
+        resid_var = max(resid_var, 1e-10)
 
-    df = pd.DataFrame(rows)
+        # variance model (fit once per origin)
+        if variance_type == 'static':
+            # constant innovation variance
+            sigma_innov = {h: np.sqrt(resid_var) for h in horizons}
 
-    return df
+        elif variance_type == 'garch':
+            garch_res, scale = fit_garch(resid, **(variance_params or {}))
+            var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
+            sigma_innov = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
+            
+        else:
+            raise ValueError('Unknown variance_type')
+        
+        # ---- score all horizons ----
+        for h in horizons:
+            y_true = y_test.iloc[h - 1]
+            mu_h = mu.iloc[h - 1]
+            sigma_native_h = sigma_native.iloc[h - 1]
+            
+            # Fallback for NaN sigma (e.g., ETS/TBATS interval failure)
+            if pd.isna(sigma_native_h):
+                # Use the in-sample residual standard deviation as a constant estimate
+                if resid_var > 0:
+                    sigma_native_h = np.sqrt(resid_var)
+                    if verbose:
+                        tqdm.write(f"Warning: NaN sigma_native at origin {t}, horizon {h}. Using residual SD.")
+                else:
+                    # If resid_var is zero or missing, skip this record
+                    if verbose:
+                        tqdm.write(f"Warning: NaN sigma_native and zero residual variance at origin {t}, horizon {h}. Skipping.")
+                    continue
+            
+            # total predictive uncertainty (sigma)
+            ratio = np.sqrt(sigma_innov[h]**2 / resid_var) if resid_var > 0 else 1.0
+            
+            inflation = 1.0 if variance_inflation_alpha is None \
+                else np.sqrt(1.0 + variance_inflation_alpha * (h - 1))
+            
+            inflation = min(inflation, max_inflation)
+            # Cap variance inflation to avoid extreme interval widening
+            # when residual variance is very small or GARCH variance spikes.
+            # This prevents numerical instability and unrealistic predictive intervals.
+            # A cap of 5.0 allows substantial volatility adjustment while
+            # maintaining practical interpretability.
+            
+            sigma_h = sigma_native_h * ratio * inflation
+            
+            records.append({
+                'origin'        : y.index[t],
+                'origin_idx'    : t,
+                'horizon'       : h,
+                'mu'            : mu_h,
+                'sigma'         : sigma_h,
+                'sigma_native'  : sigma_native_h,
+                'y_true'        : y_true,
+                'ratio'         : ratio,
+                'inflation'     : inflation,
+                'alpha'         : variance_inflation_alpha,
+                'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
+                'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
+                'mean_model'    : model_type,
+                'variance_model': variance_type
+            })
 
-# Example notebook usage:
+    return pd.DataFrame(records)
+
+# Example notebook usage
 #
-# all_results = []
-# all_results.extend(ro_results_sarima)
-# all_results.extend(ro_results_ets)
-# all_results.extend(ro_results_tbats)
-#
-# comparison_df = summarize_evaluations(all_results)
-# comparison_df.sort_values("RMSE")
+# dfs = []
+# for h in [1, 13, 26, 52]:
+#     dfs.append(
+#         rolling_crps(
+#             y=y,
+#             model_type="tbats",
+#             model_params=tbats_params,
+#             variance_type="garch",
+#             variance_params={"p": 1, "q": 1},
+#             horizons=h
+#         )
+#     )
+
+# df_all = pd.concat(dfs)
 
 # =========================================================
-# 9. GARCH-adjusted interval coverage
+# 11. GARCH-adjusted interval coverage
 # =========================================================
 
 def garch_adjusted_coverage(
     y_true,
     garch_model,
     mean_forecast,
+    scale=1.0,
     alpha=0.05
 ):
     """
-    Adjust forecast intervals using GARCH conditional volatility.
+    Compute forecast intervals using GARCH conditional volatility forecasts.
+
+    Parameters
+    ----------
+    y_true : array-like
+        Actual observed values for the forecast period.
+    garch_model : ARCHModelResult
+        Fitted GARCH model result (from fit_garch).
+    mean_forecast : array-like
+        Mean forecasts from the mean model (length = horizon).
+    scale : float, default=1.0
+        Scaling factor returned by fit_garch.
+    alpha : float, default=0.05
+        Significance level (1 - nominal coverage).
+
+    Returns
+    -------
+    dict with keys:
+        lower : array
+        upper : array
+        coverage : float (empirical coverage rate)
     """
-
-    cond_vol = garch_model.conditional_volatility[-len(mean_forecast):] * scale
-
+    horizon = len(mean_forecast)
+    
+    # Generate variance forecasts for the entire horizon
+    var_forecast = garch_model.forecast(horizon=horizon).variance.iloc[-1].values
+    
+    # Conditional volatility forecasts (in original units)
+    cond_vol = np.sqrt(var_forecast) * scale
+    
     z = stats.norm.ppf(1 - alpha / 2)
-
+    
     lower = mean_forecast - z * cond_vol
     upper = mean_forecast + z * cond_vol
-
-    y = y_true.values
-    lower = np.asarray(lower)
-    upper = np.asarray(upper)
-
-    coverage = np.mean((y >= lower) & (y <= upper))
-
+    
+    y_true = np.asarray(y_true)
+    coverage = np.mean((y_true >= lower) & (y_true <= upper))
+    
     return {
-        "lower"   : lower,
-        "upper"   : upper,
+        "lower": lower,
+        "upper": upper,
         "coverage": coverage
     }
 
@@ -944,13 +910,13 @@ def garch_adjusted_coverage(
 #     y_true=y_test,
 #     garch_model=garch_res,
 #     mean_forecast=mean,
+#     scale=scale,
 #     alpha=0.05
 # )
-#
-# garch_adj["coverage"]
+# print(garch_adj["coverage"])
 
 # =========================================================
-# 10. Diebold–Mariano test
+# 12. Diebold–Mariano test
 # =========================================================
 
 def diebold_mariano(e1, e2, h=1, loss='mse'):
@@ -991,6 +957,10 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
     gamma0 = np.var(d, ddof=1)
 
     var_d = gamma0
+    
+    if var_d <= 1e-12:
+        return np.nan, np.nan
+    
     for lag in range(1, max_lag + 1):
         weight = 1 - lag / (max_lag + 1)
         cov = np.cov(d[lag:], d[:-lag], ddof=1)[0, 1]
@@ -1013,130 +983,7 @@ def diebold_mariano(e1, e2, h=1, loss='mse'):
 # )
 
 # =========================================================
-# 11. Rolling CRPS
-# =========================================================
-# mean model --> mu, sigma_native
-# innovation model --> sigma_innov
-# post-model calibration --> variance_inflation_alpha
-
-def rolling_crps(
-    y,
-    model_type,
-    model_params,
-    variance_type='static',  # 'static' or 'garch'
-    variance_params=None,
-    exog=None,
-    start_train_size=156,
-    horizons=(1,13,26,52),
-    step=13,
-    variance_inflation_alpha=None
-):
-    records = []
-    H_MAX = max(horizons)
-
-    for t in range(start_train_size, len(y) - H_MAX, step):
-
-        # split data
-        y_train = y.iloc[:t]
-        exog_train = exog.iloc[:t] if exog is not None else None
-        exog_test  = exog.iloc[t:t + H_MAX] if exog is not None else None
-
-        # fit the mean model once per origin
-        mean_fit = fit_mean_model(
-            y_train,
-            model_type,
-            model_params,
-            exog=exog_train
-        )
-        
-        mu, sigma_native, _ = forecast_mean_model(
-            mean_fit['fitted_model'],
-            model_type,
-            horizon=H_MAX,
-            exog=exog_test
-        )
-        # mu - multi-step conditional mean forecast
-        # sigma_state - mean model forecast uncertainty (state evolution + observation noise), assuming Gaussian innovations
-        
-        resid = mean_fit['residuals'].dropna()
-        resid_var = resid.var(ddof=1)
-
-        # variance model (fit once per origin)
-        if variance_type == 'static':
-            # constant innovation variance
-            sigma_innov = {h: np.sqrt(resid_var) for h in horizons}
-
-        elif variance_type == 'garch':
-            garch_res, scale = fit_garch(resid, **(variance_params or {}))
-            var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            sigma_innov = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
-            
-        else:
-            raise ValueError('Unknown variance_type')
-        
-        # ---- score all horizons ----
-        for h in horizons:
-            y_true = float(y.iloc[t + h - 1])
-            mu_h = float(mu.iloc[h - 1])
-            
-            # mean model uncertainty (state-space)
-            if sigma_native is None:
-                raise RuntimeError('Mean model did not return forecast uncertainty')
-            
-            sigma_native_h = float(sigma_native.iloc[h - 1])
-            
-            # innovation variance adjustment
-            sigma_innov_h = float(sigma_innov[h])
-            
-            # total predictive uncertainty (sigma)
-            ratio = np.sqrt(sigma_innov_h**2 / resid_var) if resid_var > 0 else 1.0
-            
-            if variance_inflation_alpha is None:
-                # leave h=1 unchanged
-                inflation = 1.0              
-            else:
-                inflation = np.sqrt(1.0 + variance_inflation_alpha * (h - 1))
-                
-            inflation = min(inflation, 5.0)
-            sigma_h = sigma_native_h * ratio * inflation
-            
-            records.append({
-                'origin'        : y.index[t],
-                'horizon'       : h,
-                'mu'            : mu_h,
-                'sigma'         : sigma_h,
-                'sigma_native'  : sigma_native_h,
-                'y_true'        : y_true,
-                'ratio'         : ratio,
-                'inflation'     : inflation,
-                'alpha'         : variance_inflation_alpha,
-                'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
-                'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
-                'mean_model'    : model_type,
-                'variance_model': variance_type
-            })
-
-    return pd.DataFrame(records)
-
-# Example notebook usage
-#
-# dfs = []
-# for h in [1, 13, 26, 52]:
-#     dfs.append(
-#         rolling_crps(
-#             y=y,
-#             model_type="tbats",
-#             model_params=tbats_params,
-#             variance_type="garch",
-#             variance_params={"p": 1, "q": 1},
-#             horizon=h
-#         )
-#     )
-
-# df_all = pd.concat(dfs)
-
-# =========================================================
-# 12. Interval coverage
+# 13. Interval coverage
 # =========================================================
 
 def interval_coverage(df, level=0.95):
@@ -1147,7 +994,7 @@ def interval_coverage(df, level=0.95):
     ----------
     df: DataFrame
         output of rolling_crps()
-    leval: float
+    level: float
         nominal coverage level (e.g. 0.80 or 0.95)
         
     returns

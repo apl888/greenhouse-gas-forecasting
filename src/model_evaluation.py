@@ -339,6 +339,7 @@ def forecast_mean_model(
 
 def residual_diagnostics(
     residuals, 
+    burnin=0,
     title='', 
     plot=True,
     return_results=False
@@ -368,7 +369,10 @@ def residual_diagnostics(
 
     The ADF test requires at least 50 observations; otherwise p-value is None.
     """
-
+    residuals = residuals.iloc[burnin:]  # handle the state-space initialization effect
+    # burnin = seasonal period (e.g. 52) for ARIMA models
+    # burnin = 0 for ETS and TBATS models
+    
     print(f"\n=== Residual Diagnostics: {title} ===")
 
     # --- Summary stats ---

@@ -361,7 +361,7 @@ def residual_diagnostics(
     -----
     The plots include:
     - Time series of residuals
-    - ACF of residuals (40 lags) for mean specification
+    - ACF of residuals (60 lags) for mean specification
     - Q-Q plot against normal distribution
     - Histogram with fitted normal density
     - Squared residuals time series for variance specification
@@ -411,7 +411,7 @@ def residual_diagnostics(
         axes[0,0].plot(residuals)
         axes[0,0].set_title('Residuals')
 
-        plot_acf(residuals, lags=40, ax=axes[0,1])
+        plot_acf(residuals, lags=60, ax=axes[0,1])
         axes[0,1].set_title('ACF')
 
         qqplot(residuals, line='s', ax=axes[1,0])

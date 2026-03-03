@@ -361,10 +361,10 @@ def residual_diagnostics(
     -----
     The plots include:
     - Time series of residuals
-    - ACF of residuals (40 lags)
+    - ACF of residuals (40 lags) for mean specification
     - Q-Q plot against normal distribution
     - Histogram with fitted normal density
-    - Squared residuals time series
+    - Squared residuals time series for variance specification
     - ACF of squared residuals (40 lags)
 
     The ADF test requires at least 50 observations; otherwise p-value is None.

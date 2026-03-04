@@ -570,9 +570,45 @@ def rolling_origin_evaluation(
 ):
     '''
     Rolling-origin evaluation using expanding window (point forecasts).
+    Reports on mean forecast performance via RMSE and MAE
     Returns one record per (origin, horizon).
     
-    y_train: np.ndarray
+    Parameters
+    ----------
+    y : pd.Series or pd.DataFrame
+        The target time series data with a proper index (DatetimeIndex preferred).
+    model_type : str
+        Identifier for the model architecture to be fitted.
+    model_params : dict
+        Configuration parameters passed to the model fitting function.
+    exog : pd.Series or pd.DataFrame, optional
+        Exogenous variables aligned with `y`.
+    start_train_size : int, default 156
+        Initial number of observations used for the first training window.
+    horizons : tuple of int, default (1, 13, 26, 52)
+        Specific forecast steps (lead times) to evaluate at each origin.
+    step : int, default 13
+        The number of periods to advance the origin between folds.
+    sp : int, default 52
+        Seasonal period used for calculating Seasonal Naive benchmarks.
+    checkpoint_path : str, optional
+        Path to a .pkl file for saving/loading progress to handle interruptions.
+    random_state : int, optional
+        Seed for reproducibility in stochastic models.
+    verbose : bool, default False
+        If True, prints debug information and detailed error logs.
+
+    Returns
+    -------
+    pd.DataFrame
+        A detailed log containing one row per (origin, horizon) pair with 
+        true values, predictions, and calculated error metrics (RMSE, MAE).
+        
+    Notes
+    -----
+    The function utilizes a generator to yield `y_train` and `y_test` for each 
+    fold. `y_train` grows in size by `step` observations each iteration, 
+    implementing the expanding window strategy.
     '''
     start_time = time.time()
     
@@ -741,6 +777,54 @@ def rolling_crps(
     random_state=None,
     verbose=False
 ):
+    '''
+    Evaluate probabilistic forecast quality using CRPS and PIT across rolling origins.
+
+    This function fits a mean model and a secondary variance model (Static or GARCH) 
+    at each fold to estimate a Gaussian predictive distribution. It computes the 
+    Continuous Ranked Probability Score (CRPS) and Probability Integral Transform (PIT) 
+    to assess calibration and sharpness.
+
+    Parameters
+    ----------
+    y : pd.Series
+        Target time series data.
+    model_type : str
+        The mean model architecture (e.g., 'ARIMA', 'ETS').
+    model_params : dict
+        Parameters for the mean model fitting.
+    variance_type : {'static', 'garch'}, default 'static'
+        Method for estimating innovation variance. 'static' uses constant 
+        in-sample residual variance; 'garch' fits a conditional volatility model.
+    variance_params : dict, optional
+        Keyword arguments for the GARCH model (e.g., p, q, dist).
+    exog : pd.Series or pd.DataFrame, optional
+        Exogenous features for the mean model.
+    start_train_size : int, default 156
+        Size of the initial training window.
+    horizons : tuple of int, default (1, 13, 26, 52)
+        Forecast lead times to evaluate.
+    step : int, default 13
+        Stride length between rolling origins.
+    variance_inflation_alpha : float, optional
+        Growth rate for time-dependent variance inflation (linear growth in variance).
+        Used to account for increasing uncertainty over longer horizons.
+    max_inflation : float, default 5.0
+        The maximum multiplier allowed for variance inflation to maintain stability.
+    random_state : int, optional
+        Seed for reproducibility.
+    verbose : bool, default False
+        Whether to report warnings regarding NaN sigmas or skipped folds.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing:
+        - 'crps': Continuous Ranked Probability Score (lower is better).
+        - 'pit': Probability Integral Transform value (for calibration checking).
+        - 'mu' & 'sigma': Parameters of the Gaussian predictive distribution.
+        - 'ratio' & 'inflation': Components used to scale the native model uncertainty.
+    '''
 
     records = []
     H_MAX = max(horizons)

@@ -266,7 +266,7 @@ def fit_mean_model(y,
         resid = results.resid.dropna()
         fitted_vals = results.fittedvalues.loc[resid.index]
 
-    elif model_type == 'ets'
+    elif model_type == 'ets':
         model_params = {**model_params, "auto":False}
         model = AutoETS(**model_params)
         results = model.fit(y)

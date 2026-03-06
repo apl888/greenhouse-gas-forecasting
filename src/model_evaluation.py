@@ -39,6 +39,7 @@ from statsmodels.graphics.gofplots import qqplot
 
 from sktime.forecasting.tbats import TBATS
 from sktime.forecasting.ets import AutoETS
+from sktime.forecasting.base import ForecastingHorizon
 
 from arch import arch_model
 import matplotlib.pyplot as plt
@@ -251,7 +252,7 @@ def fit_mean_model(y,
             exog=exog,
             order=model_params['order'],
             seasonal_order=model_params['seasonal_order'],
-            trend=model_params.get('trend', 'n'),
+            trend=model_params['trend'],
             enforce_stationarity=model_params.get('enforce_stationarity', True),
             enforce_invertibility=model_params.get('enforce_invertibility', True)
         )
@@ -265,12 +266,17 @@ def fit_mean_model(y,
         resid = results.resid.dropna()
         fitted_vals = results.fittedvalues.loc[resid.index]
 
-    elif model_type == 'ets':
+    elif model_type == 'ets'
+        model_params = {**model_params, "auto":False}
         model = AutoETS(**model_params)
         results = model.fit(y)
 
-        resid = results.resid.dropna()
-        fitted_vals = results.fittedvalues.loc[resid.index]
+        # in-sample fitted values
+        fh = ForecastingHorizon(y.index, is_relative=False)
+        fitted_vals = results.predict(fh)
+
+        resid = (y - fitted_vals).dropna()
+        fitted_vals = fitted_vals.loc[resid.index]
 
     elif model_type == 'tbats':
         model = TBATS(**model_params)

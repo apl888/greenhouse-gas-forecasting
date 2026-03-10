@@ -334,8 +334,8 @@ def forecast_mean_model(
         raise ValueError('Unsupported model type')
 
     return {
-        'mean': pd.Series(mean),
-        'sigma': pd.Series(sigma),
+        'mean': pd.Series(mean, index=mean.index),
+        'sigma': pd.Series(sigma, index=mean.index),
         'intervals': intervals
     }
 
@@ -778,8 +778,6 @@ def rolling_crps(
     start_train_size=156,
     horizons=(1,13,26,52),
     step=13,
-    variance_inflation_alpha=None,
-    max_inflation=5.0,
     random_state=None,
     verbose=False
 ):
@@ -812,11 +810,6 @@ def rolling_crps(
         Forecast lead times to evaluate.
     step : int, default 13
         Stride length between rolling origins.
-    variance_inflation_alpha : float, optional
-        Growth rate for time-dependent variance inflation (linear growth in variance).
-        Used to account for increasing uncertainty over longer horizons.
-    max_inflation : float, default 5.0
-        The maximum multiplier allowed for variance inflation to maintain stability.
     random_state : int, optional
         Seed for reproducibility.
     verbose : bool, default False
@@ -829,7 +822,7 @@ def rolling_crps(
         - 'crps': Continuous Ranked Probability Score (lower is better).
         - 'pit': Probability Integral Transform value (for calibration checking).
         - 'mu' & 'sigma': Parameters of the Gaussian predictive distribution.
-        - 'ratio' & 'inflation': Components used to scale the native model uncertainty.
+        - 'ratio': Components used to scale the native model uncertainty.
     '''
 
     records = []
@@ -893,18 +886,9 @@ def rolling_crps(
             
             # total predictive uncertainty (sigma)
             ratio = np.sqrt(sigma_innov[h]**2 / resid_var) if resid_var > 0 else 1.0
+            # ratio = current innovation variance / historical innovation variance
             
-            inflation = 1.0 if variance_inflation_alpha is None \
-                else np.sqrt(1.0 + variance_inflation_alpha * (h - 1))
-            
-            inflation = min(inflation, max_inflation)
-            # Cap variance inflation to avoid extreme interval widening
-            # when residual variance is very small or GARCH variance spikes.
-            # This prevents numerical instability and unrealistic predictive intervals.
-            # A cap of 5.0 allows substantial volatility adjustment while
-            # maintaining practical interpretability.
-            
-            sigma_h = sigma_native_h * ratio * inflation
+            sigma_h = sigma_native_h * ratio
             
             records.append({
                 'origin'        : y.index[t],
@@ -915,8 +899,6 @@ def rolling_crps(
                 'sigma_native'  : sigma_native_h,
                 'y_true'        : y_true,
                 'ratio'         : ratio,
-                'inflation'     : inflation,
-                'alpha'         : variance_inflation_alpha,
                 'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
                 'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
                 'mean_model'    : model_type,

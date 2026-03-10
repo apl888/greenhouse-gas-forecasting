@@ -1016,6 +1016,7 @@ def garch_adjusted_coverage(
 def diebold_mariano(e1, e2, h=1, loss='mse'):
     """
     Diebold-Mariano test with Newey-West (HAC) variance correction.
+    H0: two competing forecast methods have the same level of forecast accuracy
 
     Parameters
     ----------

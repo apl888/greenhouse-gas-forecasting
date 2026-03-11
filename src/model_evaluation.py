@@ -316,7 +316,7 @@ def forecast_mean_model(
 
     if model_type == 'sarima':
         exog_np = exog.values if exog is not None else None
-        fc = results.get_forecast(steps=horizon, exog=exog_np)
+        fc = results.get_forecast(steps=horizon, exog=exog_np, index=None)
         index = pd.RangeIndex(1, horizon + 1, name='step')
         mean = pd.Series(fc.predicted_mean, index=index)
         # Use full forecast error variance (includes innovation + parameter uncertainty)

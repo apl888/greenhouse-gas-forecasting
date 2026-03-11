@@ -262,14 +262,21 @@ def fit_mean_model(y,
             enforce_invertibility=model_params.get('enforce_invertibility', True)
         )
 
-        results = model.fit(
-            start_params=start_params,
-            disp=False,
-            maxiter=model_params.get('maxiter', 300)
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=UserWarning)
+            
+            results = model.fit(
+                start_params=start_params,
+                disp=False,
+                maxiter=model_params.get('maxiter', 300)
+            )
+            
         # Return residuals/fitted as Series with original index
         resid = pd.Series(results.resid, index=y.index).dropna()
+        resid= resid.iloc[results.loglikelihood_burn:]
         fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
+        
+        start_params = results.params
 
     elif model_type == 'ets':
         model_params = {**model_params, 'auto':False}
@@ -292,10 +299,11 @@ def fit_mean_model(y,
         raise ValueError(f'Unsupported model_type: {model_type}')
 
     return {
-        'model_type': model_type,
-        'results': results,
-        'residuals': resid,
-        'fitted_values': fitted_vals
+        'model_type'   : model_type,
+        'results'      : results,
+        'residuals'    : resid,
+        'fitted_values': fitted_vals,
+        'start_params' : start_params
     }
 
 # =========================================================
@@ -793,6 +801,7 @@ def rolling_crps(
     start_train_size=156,
     horizons=(1,13,26,52),
     step=13,
+    start_params=None,
     random_state=None,
     verbose=False, 
     progress=False,
@@ -862,11 +871,15 @@ def rolling_crps(
             y_train,
             model_type,
             model_params,
-            exog=exog_train
+            exog=exog_train,
+            start_params=start_params
         )
         
-        print(f"Fold t={t}, len(y_train)={len(y_train)}, index freq={y_train.index.freq}")
-        print(f"y_train index: {y_train.index[:3]} ... {y_train.index[-3:]}")
+        start_params = fitted.get('start_params')
+        
+        if verbose:
+            print(f"Fold t={t}, len(y_train)={len(y_train)}, index freq={y_train.index.freq}")
+            print(f"y_train index: {y_train.index[:3]} ... {y_train.index[-3:]}")
 
         fc = forecast_mean_model(
             fitted,
@@ -917,7 +930,7 @@ def rolling_crps(
                 continue
 
         # innovation variance ratios
-        resid_sd = np.sqrt(resid_var)
+        resid_sd = max(np.sqrt(resid_var), 1e-10)
         ratio = sigma_innov_vals / resid_sd
         
         sigma_h = sigma_native_h * ratio

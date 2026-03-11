@@ -315,9 +315,9 @@ def forecast_mean_model(
     if model_type == 'sarima':
         fc = results.get_forecast(steps=horizon, exog=exog)
         mean = fc.predicted_mean
-        var = fc.var_pred_mean
-        sigma = np.sqrt(var)
-        intervals = fc.conf_int()
+        # Use full forecast error variance (includes innovation + parameter uncertainty)
+        sigma = np.sqrt(fc.var_forecast)
+        intervals = fc.conf_int()  # 95% intervals by default
 
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
@@ -326,16 +326,18 @@ def forecast_mean_model(
         try:
             intervals = results.predict_interval(fh, coverage=0.95)
             sigma = (intervals.iloc[:, 1] - intervals.iloc[:, 0]) / (2 * 1.96)
-        except Exception:
+        except (AttributeError, NotImplementedError):
             sigma = pd.Series(np.nan, index=mean.index)
             intervals = None
 
     else:
-        raise ValueError('Unsupported model type')
+        raise ValueError('Unsupported model type: {model_type}')
 
     return {
-        'mean': pd.Series(mean, index=mean.index),
-        'sigma': pd.Series(sigma, index=mean.index),
+        #'mean': pd.Series(mean, index=mean.index),
+        #'sigma': pd.Series(sigma, index=mean.index),
+        'mean': mean,
+        'sigma': sigma,
         'intervals': intervals
     }
 
@@ -842,10 +844,6 @@ def rolling_crps(
         iterator = tqdm(iterator, total=total_windows, desc=f"rolling_crps for {model_type} model")
         
     for t, y_train, y_test, exog_train, exog_test in iterator:
-
-    # for t, y_train, y_test, exog_train, exog_test in rolling_origins(
-    #    y, exog, start_train_size, H_MAX, step):
-
         # fit the mean model once per origin
         fitted = fit_mean_model(
             y_train,
@@ -880,10 +878,14 @@ def rolling_crps(
         else:
             raise ValueError('Unknown variance_type')
         
+        # ---- Align forecast values with requested horizons (robust index alignment) ----
+        mu = mu.reindex(range(1, H_MAX + 1))          # ensure index 1..H_MAX
+        sigma_native = sigma_native.reindex(range(1, H_MAX + 1))
+        
         # ---- score all horizons (vectorized) ----
-        y_true = y_test.iloc[h_idx].values
-        mu_h = mu.iloc[h_idx].values
-        sigma_native_h = sigma_native.iloc[h_idx].values
+        y_true = y_test.iloc[horizons - 1].values
+        mu_h = mu.loc[horizons].values
+        sigma_native_h = sigma_native.loc[horizons].values
 
         # Handle NaN sigma values
         nan_mask = np.isnan(sigma_native_h)

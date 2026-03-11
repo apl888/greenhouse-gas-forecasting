@@ -316,11 +316,14 @@ def forecast_mean_model(
 
     if model_type == 'sarima':
         exog_np = exog.values if exog is not None else None
-        fc = results.get_forecast(steps=horizon, exog=exog_np, index=None)
+        fc = results.get_forecast(steps=horizon, exog=exog_np)
         index = pd.RangeIndex(1, horizon + 1, name='step')
-        mean = pd.Series(fc.predicted_mean, index=index)
+        mean = pd.Series(fc.predicted_mean.values, index=index)
         # Use full forecast error variance (includes innovation + parameter uncertainty)
-        sigma = pd.Series(np.sqrt(fc.var_forecast), index=index)
+        sigma = pd.Series(
+            np.sqrt(fc.var_forecast.values), 
+            index=index
+            )
         intervals = fc.conf_int()  # 95% intervals by default
         if intervals is not None:
             intervals = pd.DataFrame(intervals, index=index, columns=['lower', 'upper'])

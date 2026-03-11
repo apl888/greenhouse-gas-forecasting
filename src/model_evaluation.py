@@ -162,20 +162,21 @@ def crps_gaussian(y, mu, sigma):
 
     Returns
     -------
-    float : mean CRPS
+    array-like : CRPS for each observation
     """
     y = np.asarray(y)
     mu = np.asarray(mu)
     sigma = np.maximum(np.asarray(sigma), 1e-8)
 
     z = (y - mu) / sigma
+    
     crps = sigma * (
         z * (2 * norm.cdf(z) - 1)
         + 2 * norm.pdf(z)
         - 1 / np.sqrt(np.pi)
     )
 
-    return np.mean(crps)
+    return crps
 
 # Example notebook usage:
 #

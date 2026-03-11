@@ -242,14 +242,18 @@ def fit_mean_model(y,
     """
 
     if verbose:
-        logger.info(f"Fitting {model_type.upper()} model")
+        logger.info(f'Fitting {model_type.upper()} model')
 
     if model_type == 'sarima':
         if 'trend' not in model_params:
-            raise ValueError("Explicit trend must be specified for SARIMA")
+            raise ValueError('Explicit trend must be specified for SARIMA')
+        
+        y_np = y.values
+        exog_np = exog.values if exog is not None else None
+        
         model = SARIMAX(
-            y,
-            exog=exog,
+            y_np,
+            exog=exog_np,
             order=model_params['order'],
             seasonal_order=model_params['seasonal_order'],
             trend=model_params['trend'],
@@ -262,37 +266,35 @@ def fit_mean_model(y,
             disp=False,
             maxiter=model_params.get('maxiter', 300)
         )
-
-        resid = results.resid.dropna()
-        fitted_vals = results.fittedvalues.loc[resid.index]
+        # Return residuals/fitted as Series with original index
+        resid = pd.Series(results.resid, index=y.index).dropna()
+        fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
 
     elif model_type == 'ets':
-        model_params = {**model_params, "auto":False}
+        model_params = {**model_params, 'auto':False}
         model = AutoETS(**model_params)
         results = model.fit(y)
 
         # in-sample fitted values
         fh = ForecastingHorizon(y.index, is_relative=False)
         fitted_vals = results.predict(fh)
-
         resid = (y - fitted_vals).dropna()
         fitted_vals = fitted_vals.loc[resid.index]
 
     elif model_type == 'tbats':
         model = TBATS(**model_params)
         results = model.fit(y)
-
         resid = results.predict_residuals().dropna()
         fitted_vals = y.loc[resid.index] - resid
 
     else:
-        raise ValueError(f"Unsupported model_type: {model_type}")
+        raise ValueError(f'Unsupported model_type: {model_type}')
 
     return {
-        "model_type": model_type,
-        "results": results,
-        "residuals": resid,
-        "fitted_values": fitted_vals
+        'model_type': model_type,
+        'results': results,
+        'residuals': resid,
+        'fitted_values': fitted_vals
     }
 
 # =========================================================
@@ -313,11 +315,15 @@ def forecast_mean_model(
     results = fitted['results']
 
     if model_type == 'sarima':
-        fc = results.get_forecast(steps=horizon, exog=exog)
-        mean = fc.predicted_mean
+        exog_np = exog.values if exog is not None else None
+        fc = results.get_forecast(steps=horizon, exog=exog_np)
+        index = pd.RangeIndex(1, horizon + 1, name='step')
+        mean = pd.Series(fc.predicted_mean, index=index)
         # Use full forecast error variance (includes innovation + parameter uncertainty)
-        sigma = np.sqrt(fc.var_forecast)
+        sigma = pd.Series(np.sqrt(fc.var_forecast), index=index)
         intervals = fc.conf_int()  # 95% intervals by default
+        if intervals is not None:
+            intervals = pd.DataFrame(intervals, index=index, columns=['lower', 'upper'])
 
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
@@ -334,8 +340,6 @@ def forecast_mean_model(
         raise ValueError('Unsupported model type: {model_type}')
 
     return {
-        #'mean': pd.Series(mean, index=mean.index),
-        #'sigma': pd.Series(sigma, index=mean.index),
         'mean': mean,
         'sigma': sigma,
         'intervals': intervals

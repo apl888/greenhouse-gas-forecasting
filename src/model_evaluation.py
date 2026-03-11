@@ -779,7 +779,8 @@ def rolling_crps(
     horizons=(1,13,26,52),
     step=13,
     random_state=None,
-    verbose=False
+    verbose=False, 
+    progress=False,
 ):
     '''
     Evaluate probabilistic forecast quality using CRPS and PIT across rolling origins.
@@ -824,12 +825,26 @@ def rolling_crps(
         - 'mu' & 'sigma': Parameters of the Gaussian predictive distribution.
         - 'ratio': Components used to scale the native model uncertainty.
     '''
-
+    if np.isscalar(horizons):
+        horizons = [horizons]
+    horizons = np.array(horizons)
+    
     records = []
     H_MAX = max(horizons)
+    h_idx = horizons - 1 
+    
+    iterator = rolling_origins(y, exog, start_train_size, H_MAX, step)
+    
+    if progress:
+        # calculate expected number of windows
+        n_obs = len(y)
+        total_windows = (n_obs - start_train_size - H_MAX) // step + 1
+        iterator = tqdm(iterator, total=total_windows, desc=f"rolling_crps for {model_type} model")
+        
+    for t, y_train, y_test, exog_train, exog_test in iterator:
 
-    for t, y_train, y_test, exog_train, exog_test in rolling_origins(
-        y, exog, start_train_size, H_MAX, step):
+    # for t, y_train, y_test, exog_train, exog_test in rolling_origins(
+    #    y, exog, start_train_size, H_MAX, step):
 
         # fit the mean model once per origin
         fitted = fit_mean_model(
@@ -855,52 +870,58 @@ def rolling_crps(
         # variance model (fit once per origin)
         if variance_type == 'static':
             # constant innovation variance
-            sigma_innov = {h: np.sqrt(resid_var) for h in horizons}
+            sigma_innov_vals = np.full(len(horizons), np.sqrt(resid_var))
 
         elif variance_type == 'garch':
             garch_res, scale = fit_garch(resid, **(variance_params or {}))
             var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            sigma_innov = {h: np.sqrt(var_fcst.iloc[h - 1]) * scale for h in horizons}
+            sigma_innov_vals = np.sqrt(var_fcst.iloc[h_idx].values) * scale
             
         else:
             raise ValueError('Unknown variance_type')
         
-        # ---- score all horizons ----
-        for h in horizons:
-            y_true = y_test.iloc[h - 1]
-            mu_h = mu.iloc[h - 1]
-            sigma_native_h = sigma_native.iloc[h - 1]
-            
-            # Fallback for NaN sigma (e.g., ETS/TBATS interval failure)
-            if pd.isna(sigma_native_h):
-                # Use the in-sample residual standard deviation as a constant estimate
-                if resid_var > 0:
-                    sigma_native_h = np.sqrt(resid_var)
-                    if verbose:
-                        tqdm.write(f"Warning: NaN sigma_native at origin {t}, horizon {h}. Using residual SD.")
-                else:
-                    # If resid_var is zero or missing, skip this record
-                    if verbose:
-                        tqdm.write(f"Warning: NaN sigma_native and zero residual variance at origin {t}, horizon {h}. Skipping.")
-                    continue
-            
-            # total predictive uncertainty (sigma)
-            ratio = np.sqrt(sigma_innov[h]**2 / resid_var) if resid_var > 0 else 1.0
-            # ratio = current innovation variance / historical innovation variance
-            
-            sigma_h = sigma_native_h * ratio
-            
+        # ---- score all horizons (vectorized) ----
+        y_true = y_test.iloc[h_idx].values
+        mu_h = mu.iloc[h_idx].values
+        sigma_native_h = sigma_native.iloc[h_idx].values
+
+        # Handle NaN sigma values
+        nan_mask = np.isnan(sigma_native_h)
+
+        if nan_mask.any():
+            if resid_var > 0:
+                sigma_native_h[nan_mask] = np.sqrt(resid_var)
+                if verbose:
+                    print(f"Warning: NaN sigma_native at origin {t}. Using residual SD.")
+            else:
+                if verbose:
+                    print(f"Warning: NaN sigma_native and zero residual variance at origin {t}. Skipping.")
+                continue
+
+        # innovation variance ratios
+        resid_sd = np.sqrt(resid_var)
+        ratio = sigma_innov_vals / resid_sd
+        
+        sigma_h = sigma_native_h * ratio
+        sigma_h = np.maximum(sigma_h, 1e-10)
+
+        # compute scores vectorized
+        crps_vals = crps_gaussian(y_true, mu_h, sigma_h)
+        pit_vals = pit_gaussian(y_true, mu_h, sigma_h)
+
+        for i, h in enumerate(horizons):
+
             records.append({
                 'origin'        : y.index[t],
                 'origin_idx'    : t,
                 'horizon'       : h,
-                'mu'            : mu_h,
-                'sigma'         : sigma_h,
-                'sigma_native'  : sigma_native_h,
-                'y_true'        : y_true,
-                'ratio'         : ratio,
-                'crps'          : crps_gaussian(y_true, mu_h, sigma_h),
-                'pit'           : pit_gaussian(y_true, mu_h, sigma_h),
+                'mu'            : mu_h[i],
+                'sigma'         : sigma_h[i],
+                'sigma_native'  : sigma_native_h[i],
+                'y_true'        : y_true[i],
+                'ratio'         : ratio[i],
+                'crps'          : crps_vals[i],
+                'pit'           : pit_vals[i],
                 'mean_model'    : model_type,
                 'variance_model': variance_type
             })

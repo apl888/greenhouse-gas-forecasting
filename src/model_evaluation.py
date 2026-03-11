@@ -852,6 +852,9 @@ def rolling_crps(
             exog=exog_train
         )
         
+        print(f"Fold t={t}, len(y_train)={len(y_train)}, index freq={y_train.index.freq}")
+        print(f"y_train index: {y_train.index[:3]} ... {y_train.index[-3:]}")
+
         fc = forecast_mean_model(
             fitted,
             horizon=H_MAX,

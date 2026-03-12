@@ -894,6 +894,9 @@ def rolling_crps(
         resid = fitted['residuals']
         resid_var = resid.var(ddof=1)
         resid_var = max(resid_var, 1e-10)
+        
+        # convert mean forecast variance into full predictive variance
+        sigma_native = np.sqrt(sigma_native**2 + resid_var)
 
         # variance model (fit once per origin)
         if variance_type == 'static':

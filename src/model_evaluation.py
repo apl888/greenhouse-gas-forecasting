@@ -345,11 +345,19 @@ def forecast_mean_model(
 
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
-        mean = results.predict(fh)
+        
+        mean_vals = results.predict(fh) 
+        
+        index= pd.RangeIndex(1, horizon + 1, name='step') 
+        mean = pd.Series(np.asarray(mean_vals), index=index)
 
         try:
             intervals = results.predict_interval(fh, coverage=0.95)
-            sigma = (intervals.iloc[:, 1] - intervals.iloc[:, 0]) / (2 * 1.96)
+            
+            sigma_vals = (intervals.iloc[:,1] - intervals.iloc[:,0]) / (2 * 1.96)
+            
+            sigma = pd.Series(np.asarray(sigma_vals), index=index)
+            
         except (AttributeError, NotImplementedError):
             sigma = pd.Series(np.nan, index=mean.index)
             intervals = None

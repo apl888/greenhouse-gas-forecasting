@@ -251,7 +251,7 @@ def fit_mean_model(y,
         if 'trend' not in model_params:
             raise ValueError('Explicit trend must be specified for SARIMA')
         
-        y_np = y.values
+        y_np = y.values   # 'y_np' - convert a pandas series (y) to a numpy (np) array
         exog_np = exog.values if exog is not None else None
         
         model = SARIMAX(
@@ -261,17 +261,31 @@ def fit_mean_model(y,
             seasonal_order=model_params['seasonal_order'],
             trend=model_params['trend'],
             enforce_stationarity=model_params.get('enforce_stationarity', True),
-            enforce_invertibility=model_params.get('enforce_invertibility', True)
+            enforce_invertibility=model_params.get('enforce_invertibility', True),
+            initialization=model_params.get('initialization', None)
         )
 
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=UserWarning)
             
-            results = model.fit(
-                start_params=start_params,
-                disp=False,
-                maxiter=model_params.get('maxiter', 300)
-            )
+            try:
+                results = model.fit(
+                    start_params=start_params,
+                    disp=False,
+                    method=model_params.get('method', 'lbfgs'),
+                    maxiter=model_params.get('maxiter', 300)
+                    )
+            except Exception as e:
+                # if prefered method fails, try the 'Powell' method
+                # alert the user that the method is switching to 'Powell'
+                print(f"Warning: Primary fit failed at a rolling window, Switching to 'powell' method. Error: {e}")
+                
+                results = model.fit(
+                    start_params=start_params,
+                    disp=False,
+                    method='powell',
+                    maxiter=model_params.get('maxiter', 300)
+                )
             
         # Return residuals/fitted as Series with original index
         resid = pd.Series(results.resid, index=y.index).dropna()
@@ -293,10 +307,28 @@ def fit_mean_model(y,
             stochastic_level=model_params.get('stochastic_level', True),
             stochastic_trend=model_params.get('stochastic_trend', False),
             stochastic_seasonal=model_params.get('stochastic_seasonal', False),
-            autoregressive=model_params.get('autoregressive', 0)
+            autoregressive=model_params.get('autoregressive', 0),
+            initialization=model_params.get('initialization', None)
         )
 
-        results = model.fit(disp=False)
+        try:
+            results = model.fit(
+                start_params=start_params,
+                disp=False,
+                method=model_params.get('method', 'lbfgs'),
+                maxiter=model_params.get('maxiter', 300)
+                )
+        except Exception as e:
+            # if prefered method fails, try the 'Powell' method
+            # alert the user that the method is switching to 'Powell'
+            print(f"Warning: Primary fit failed at a rolling window, Switching to 'powell' method. Error: {e}")
+            
+            results = model.fit(
+                start_params=start_params,
+                disp=False,
+                method='powell',
+                maxiter=model_params.get('maxiter', 300)
+            )
 
         # residuals (align with index)
         resid = pd.Series(results.resid, index=y.index).dropna()

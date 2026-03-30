@@ -32,6 +32,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.statespace.structural import UnobservedComponents
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.stats.stattools import jarque_bera
 from statsmodels.tsa.stattools import adfuller
@@ -278,6 +279,32 @@ def fit_mean_model(y,
         fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
         
         start_params = results.params
+        
+    elif model_type == 'ucm':
+        y_np = y.values
+        exog_np = exog.values if exog is not None else None
+
+        model = UnobservedComponents(
+            endog=y_np,
+            exog=exog_np,
+            level=model_params.get('level', 'local level'),
+            seasonal=model_params.get('seasonal', None),
+            freq_seasonal=model_params.get('freq_seasonal', None),
+            stochastic_level=model_params.get('stochastic_level', True),
+            stochastic_trend=model_params.get('stochastic_trend', False),
+            stochastic_seasonal=model_params.get('stochastic_seasonal', False),
+            autoregressive=model_params.get('autoregressive', 0)
+        )
+
+        results = model.fit(disp=False)
+
+        # residuals (align with index)
+        resid = pd.Series(results.resid, index=y.index).dropna()
+
+        # fitted values
+        fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
+
+        start_params = results.params
 
     elif model_type == 'ets':
         model_params = {**model_params, 'auto':False}
@@ -343,6 +370,26 @@ def forecast_mean_model(
         # if intervals is not None:
         #     intervals = pd.DataFrame(intervals, index=index, columns=['lower', 'upper'])
 
+    elif model_type == 'ucm':
+        exog_np = exog.values if exog is not None else None
+
+        start = results.nobs
+        end = results.nobs + horizon - 1
+
+        fc = results.get_prediction(start=start, end=end, exog=exog_np)
+
+        index = pd.RangeIndex(1, horizon + 1, name='step')
+
+        mean = pd.Series(np.asarray(fc.predicted_mean), index=index)
+
+        # IMPORTANT: this is full state-space forecast variance
+        sigma = pd.Series(
+            np.sqrt(np.asarray(fc.var_pred_mean)),
+            index=index
+        )
+
+        intervals = None
+    
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
         
@@ -904,7 +951,11 @@ def rolling_crps(
         resid_var = max(resid_var, 1e-10)
         
         # convert mean forecast variance into full predictive variance
-        sigma_native = np.sqrt(sigma_native**2 + resid_var)
+        if model_type == 'ucm':
+            # already full predictive variance → do NOT add residual variance
+            sigma_native = sigma_native
+        else:
+            sigma_native = np.sqrt(sigma_native**2 + resid_var)
 
         # variance model (fit once per origin)
         if variance_type == 'static':

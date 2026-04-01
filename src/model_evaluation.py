@@ -28,6 +28,7 @@ import os
 import pickle
 import warnings
 from tqdm.auto import tqdm
+import traceback
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
@@ -836,7 +837,6 @@ def rolling_origin_evaluation(
         except Exception as e:
             tqdm.write(f'Fold failed at t={t}: {e}')
             if verbose:
-                import traceback
                 traceback.print_exc()                         # prints full traceback to stderr
                 # logger.exception(f"Fold failed at t={t}")   # alternative approach to debugging
             continue

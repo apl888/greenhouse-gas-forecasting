@@ -411,18 +411,17 @@ def forecast_mean_model(
         end = results.nobs + horizon - 1
 
         fc = results.get_prediction(start=start, end=end, exog=exog_np)
-
         index = pd.RangeIndex(1, horizon + 1, name='step')
-
         mean = pd.Series(np.asarray(fc.predicted_mean), index=index)
-
         # IMPORTANT: this is full state-space forecast variance
         sigma = pd.Series(
             np.sqrt(np.asarray(fc.var_pred_mean)),
             index=index
         )
-
         intervals = None
+        # intervals = fc.conf_int()  # 95% intervals by default
+        # if intervals is not None:
+        #     intervals = pd.DataFrame(intervals, index=index, columns=['lower', 'upper'])
     
     elif model_type in ['ets', 'tbats']:
         fh = np.arange(1, horizon + 1)
@@ -684,6 +683,7 @@ def rolling_origin_evaluation(
     step=13,
     sp=52,
     checkpoint_path=None,
+    start_params=None,
     random_state=None,
     verbose=False
 ):
@@ -765,8 +765,11 @@ def rolling_origin_evaluation(
                 model_type,
                 model_params,
                 exog=exog_train,
+                start_params=start_params,
                 verbose=verbose
             )
+
+            start_params = fitted.get('start_params')
             
             fc = forecast_mean_model(
                 fitted,
@@ -775,7 +778,17 @@ def rolling_origin_evaluation(
             )
             
             mean = fc['mean']
+
+            # Check for NaN or implausible values across all horizons.  Validate forecasts
+            if mean.isnull().any() or fc['sigma'].isnull().any():
+                tqdm.write(f"Skipping fold t={t}: NaN in forecast")
+                continue
             
+            if (mean < 1500).any() or (mean > 2500).any():
+                tqdm.write(f"Skipping fold t={t}: implausible forecast range [{mean.min():.1f}, {mean.max():.1f}]")
+                continue
+
+            # loop over horizons
             for h in horizons:
                 y_true = y_test.iloc[h - 1]
                 y_pred = mean.iloc[h - 1]

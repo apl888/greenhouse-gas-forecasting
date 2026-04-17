@@ -140,7 +140,7 @@ def seasonal_naive_forecast(y_train, horizon, sp):
 
 # Example notebook usage:
 #
-# y_naiv e= seasonal_naive_forecast(
+# y_naive = seasonal_naive_forecast(
 #     y_train=y_train,
 #     horizon=len(y_test),
 #     sp=52
@@ -897,6 +897,7 @@ def rolling_crps(
     y,
     model_type,
     model_params,
+    distribution='normal',
     variance_type='static',  # 'static' or 'garch'
     variance_params=None,
     exog=None,
@@ -967,6 +968,11 @@ def rolling_crps(
         total_windows = (n_obs - start_train_size - H_MAX) // step + 1
         iterator = tqdm(iterator, total=total_windows, desc=f"rolling_crps for {model_type} model")
         
+    if distribution == 't':
+        nu_global, _, _ = stats.t.fit(y.diff().dropna())
+    else:
+        nu_global = None
+        
     for t, y_train, y_test, exog_train, exog_test in iterator:
         # fit the mean model once per origin
         fitted = fit_mean_model(
@@ -993,6 +999,12 @@ def rolling_crps(
         sigma_native = fc['sigma']
         
         resid = fitted['residuals']
+        
+        if distribution == 't':
+            nu = nu_global
+        else:
+            nu = None
+            
         resid_var = resid.var(ddof=1)
         resid_var = max(resid_var, 1e-10)
         
@@ -1046,8 +1058,37 @@ def rolling_crps(
         sigma_h = np.maximum(sigma_h, 1e-10)
 
         # compute scores vectorized
-        crps_vals = crps_gaussian(y_true, mu_h, sigma_h)
-        pit_vals = pit_gaussian(y_true, mu_h, sigma_h)
+        
+        #CRPS
+        def crps_sample(y, samples):
+            return np.mean(np.abs(samples - y)) - 0.5 * np.mean(np.abs(samples[:, None] - samples[None, :]))
+        
+        crps_vals = []
+        N = 500 # number of samples
+        
+        for i in range(len(horizons)):
+            if distribution == 'normal':
+                samples = np.random.normal(mu_h[i], sigma_h[i], size=N)
+                
+            elif distribution == 't':
+                samples = stats.t.rvs(df=nu, loc=mu_h[i], scale=sigma_h[i], size=N)
+        
+            crps_vals.append(crps_sample(y_true[i], samples))
+
+        crps_vals = np.array(crps_vals)
+        
+        # PIT
+        if distribution == 'normal':
+            pit_vals = stats.norm.cdf(y_true, loc=mu_h, scale=sigma_h)
+            
+        elif distribution == 't':
+            pit_vals = stats.t.cdf(y_true, df=nu, loc=mu_h, scale=sigma_h)
+            
+        else:
+            raise ValueError('Unsupported distribution')
+        
+        # crps_vals = crps_gaussian(y_true, mu_h, sigma_h)
+        # pit_vals = pit_gaussian(y_true, mu_h, sigma_h)
 
         for i, h in enumerate(horizons):
 

@@ -952,14 +952,25 @@ def rolling_crps(
         - 'mu' & 'sigma': Parameters of the Gaussian predictive distribution.
         - 'ratio': Components used to scale the native model uncertainty.
     '''
+    # ---- helper function: unbiased CRPS estimator from samples ----
+    def crps_sample(y_obs, samples):
+        N = len(samples)
+        term1 = np.mean(np.abs(samples - y_obs))
+        # N / (N - 1) factor gives unbiased and fair CRPS estimator
+        term2 = np.mean(np.abs(samples[:, None] - samples[None, :]))
+        return term1 - 0.5 * (N / (N - 1)) * term2
+    
     if np.isscalar(horizons):
         horizons = [horizons]
     horizons = np.array(horizons)
-    
-    records = []
     H_MAX = max(horizons)
     h_idx = horizons - 1 
     
+    # set seed for reproducibility
+    if random_state is not None:
+        np.random.seed(random_state)
+    
+    records = []
     iterator = rolling_origins(y, exog, start_train_size, H_MAX, step)
     
     if progress:
@@ -968,13 +979,13 @@ def rolling_crps(
         total_windows = (n_obs - start_train_size - H_MAX) // step + 1
         iterator = tqdm(iterator, total=total_windows, desc=f"rolling_crps for {model_type} model")
         
+    # ---- global nu for t (as fallback)
+    nu_global = None
     if distribution == 't':
         nu_global, _, _ = stats.t.fit(y.diff().dropna())
-    else:
-        nu_global = None
         
     for t, y_train, y_test, exog_train, exog_test in iterator:
-        # fit the mean model once per origin
+        # ---- fit the mean model once per origin ----
         fitted = fit_mean_model(
             y_train,
             model_type,
@@ -982,43 +993,49 @@ def rolling_crps(
             exog=exog_train,
             start_params=start_params
         )
-        
         start_params = fitted.get('start_params')
         
         if verbose:
             print(f"Fold t={t}, len(y_train)={len(y_train)}, index freq={y_train.index.freq}")
             print(f"y_train index: {y_train.index[:3]} ... {y_train.index[-3:]}")
 
+        # ---- forecast mean and native uncertainty ----
         fc = forecast_mean_model(
             fitted,
             horizon=H_MAX,
             exog=exog_test
         )
-
-        mu = fc['mean']
-        sigma_native = fc['sigma']
+        # ---- Align forecast values with requested horizons (robust index alignment) ----
+        mu = fc['mean'].reindex(range(1, H_MAX + 1))          # ensure index 1..H_MAX
+        sigma_native = fc['sigma'].reindex(range(1, H_MAX + 1))
         
+        # ---- residuals and variance ----
         resid = fitted['residuals']
-        
+        resid_var = max(resid.var(ddof=1), 1e-10)
+        resid_sd = np.sqrt(resid_var)
+
+        # ---- t-distribution degrees of freedom, per fold ----
         if distribution == 't':
-            nu = nu_global
+            # fit t to residuals (requires at least 3 observations for df)
+            if len(resid) > 2:
+                nu, _, _ = stats.t.fit(resid)
+            else:
+                nu = nu_global if nu_global is not None else 5.0 # fallback
         else:
             nu = None
-            
-        resid_var = resid.var(ddof=1)
-        resid_var = max(resid_var, 1e-10)
         
         # convert mean forecast variance into full predictive variance
+        # native model often gies parameter uncertainty only; add residual variance
         if model_type == 'ucm':
             # already full predictive variance → do NOT add residual variance
             sigma_native = sigma_native
         else:
             sigma_native = np.sqrt(sigma_native**2 + resid_var)
 
-        # variance model (fit once per origin)
+        # variance model: static or GARCH (fit once per origin)
         if variance_type == 'static':
             # constant innovation variance
-            sigma_innov_vals = np.full(len(horizons), np.sqrt(resid_var))
+            sigma_innov_vals = np.full(len(horizons), resid_sd)
 
         elif variance_type == 'garch':
             garch_res, scale = fit_garch(resid, **(variance_params or {}))
@@ -1028,12 +1045,7 @@ def rolling_crps(
         else:
             raise ValueError('Unknown variance_type')
         
-        # ---- Align forecast values with requested horizons (robust index alignment) ----
-        mu = mu.reindex(range(1, H_MAX + 1))          # ensure index 1..H_MAX
-        sigma_native = sigma_native.reindex(range(1, H_MAX + 1))
-        
         # ---- score all horizons (vectorized) ----
-        y_true = y_test.iloc[horizons - 1].values
         mu_h = mu.loc[horizons].values
         sigma_native_h = sigma_native.loc[horizons].values
 
@@ -1042,7 +1054,7 @@ def rolling_crps(
 
         if nan_mask.any():
             if resid_var > 0:
-                sigma_native_h[nan_mask] = np.sqrt(resid_var)
+                sigma_native_h[nan_mask] = resid_sd
                 if verbose:
                     print(f"Warning: NaN sigma_native at origin {t}. Using residual SD.")
             else:
@@ -1051,47 +1063,57 @@ def rolling_crps(
                 continue
 
         # innovation variance ratios
-        resid_sd = max(np.sqrt(resid_var), 1e-10)
+        # ratio of conditional innovation std to constant residual std
         ratio = sigma_innov_vals / resid_sd
-        
+        # scale the predictive std: the innovation part is replaced by conditional volatility
         sigma_h = sigma_native_h * ratio
         sigma_h = np.maximum(sigma_h, 1e-10)
+        
+        y_true = y_test.iloc[horizons - 1].values
+        
+        # ---- CRPS and PIT ----
 
-        # compute scores vectorized
+        # crps_vals = []
+        # pit_vals = []
         
-        #CRPS
-        def crps_sample(y, samples):
-            return np.mean(np.abs(samples - y)) - 0.5 * np.mean(np.abs(samples[:, None] - samples[None, :]))
-        
-        crps_vals = []
-        N = 500 # number of samples
-        
-        for i in range(len(horizons)):
-            if distribution == 'normal':
-                samples = np.random.normal(mu_h[i], sigma_h[i], size=N)
-                
-            elif distribution == 't':
-                samples = stats.t.rvs(df=nu, loc=mu_h[i], scale=sigma_h[i], size=N)
-        
-            crps_vals.append(crps_sample(y_true[i], samples))
-
-        crps_vals = np.array(crps_vals)
-        
-        # PIT
         if distribution == 'normal':
+            # Analytical CRPS for normal distribution
+            # CRPS = sigma * [ 1/sqrt(pi) - 2 * phi(z) - z * (2*Phi(z)-1) ]
+            # where z = (y - mu)/sigma, phi = pdf, Phi = cdf
+            z = (y_true - mu_h) / sigma_h
+            phi = stats.norm.pdf(z)
+            Phi = stats.norm.cdf(z)
+            crps_vals = sigma_h * (1.0 / np.sqrt(np.pi) - 2*phi - z*(2*Phi - 1))
+            # PIT is simply the CDF
             pit_vals = stats.norm.cdf(y_true, loc=mu_h, scale=sigma_h)
-            
+
         elif distribution == 't':
-            pit_vals = stats.t.cdf(y_true, df=nu, loc=mu_h, scale=sigma_h)
+            N_SAMPLES = 500
+            crps_vals = []
+            pit_vals = []
             
+            for i in range(len(horizons)):
+                # For a t‑distribution with standard deviation sigma_h,
+                # the scale parameter must be sigma_h * sqrt((df-2)/df) (for df>2).
+                if nu > 2:
+                    scale_t = sigma_h[i] * np.sqrt((nu - 2) / nu)
+                else:
+                    scale_t = sigma_h[i]  # fallback, but variance will be infinite
+                    if verbose and nu <= 2:
+                        print(f"Warning: nu={nu} <= 2 leads to infinite variance. Using scale = sigma.")
+                    
+                samples = stats.t.rvs(df=nu, loc=mu_h[i], scale=scale_t, size=N_SAMPLES)
+                crps_vals.append(crps_sample(y_true[i], samples))
+                # PIT: use the CDF of the t distribution with the correct scale
+                pit_vals.append(stats.t.cdf(y_true[i], df=nu, loc=mu_h[i], scale=scale_t))
+            
+            crps_vals = np.array(crps_vals)
+            pit_vals = np.array(pit_vals)
         else:
             raise ValueError('Unsupported distribution')
-        
-        # crps_vals = crps_gaussian(y_true, mu_h, sigma_h)
-        # pit_vals = pit_gaussian(y_true, mu_h, sigma_h)
 
+        # ---- store results ----
         for i, h in enumerate(horizons):
-
             records.append({
                 'origin'        : y.index[t],
                 'origin_idx'    : t,

@@ -925,6 +925,13 @@ def rolling_crps(
         The mean model architecture (e.g., 'ARIMA', 'ETS').
     model_params : dict
         Parameters for the mean model fitting.
+    distribution : {'normal', 't'}, default 'normal'
+        assumed predictive distribution of forecast errors conditional on the model.  
+        - 'normal' : Gaussian predictive distribution using mean and variance
+        - 't' : Student's t predictive distribution with heavy tails,
+                where degrees of freedom are estimated from in-sample residuals
+        This affects how predictive uncertainty is mapped into crps and pit, 
+        not how the mean or variance models are estimated. 
     variance_type : {'static', 'garch'}, default 'static'
         Method for estimating innovation variance. 'static' uses constant 
         in-sample residual variance; 'garch' fits a conditional volatility model.
@@ -969,6 +976,8 @@ def rolling_crps(
     # set seed for reproducibility
     if random_state is not None:
         np.random.seed(random_state)
+        
+    start_params = None
     
     records = []
     iterator = rolling_origins(y, exog, start_train_size, H_MAX, step)
@@ -978,11 +987,6 @@ def rolling_crps(
         n_obs = len(y)
         total_windows = (n_obs - start_train_size - H_MAX) // step + 1
         iterator = tqdm(iterator, total=total_windows, desc=f"rolling_crps for {model_type} model")
-        
-    # ---- global nu for t (as fallback)
-    nu_global = None
-    if distribution == 't':
-        nu_global, _, _ = stats.t.fit(y.diff().dropna())
         
     for t, y_train, y_test, exog_train, exog_test in iterator:
         # ---- fit the mean model once per origin ----
@@ -1018,14 +1022,16 @@ def rolling_crps(
         if distribution == 't':
             # fit t to residuals (requires at least 3 observations for df)
             if len(resid) > 2:
-                nu, _, _ = stats.t.fit(resid)
+                nu = stats.t.fit(resid, floc=0)[0]
+                nu = np.clip(nu, 2.1, 50)
             else:
-                nu = nu_global if nu_global is not None else 5.0 # fallback
+                nu = 5.0 if nu is None else nu # fallback
         else:
             nu = None
         
         # convert mean forecast variance into full predictive variance
-        # native model often gies parameter uncertainty only; add residual variance
+        # var_pred_mean reflects uncertainty in the predicted mean from the state-space model.
+        # residual (innovation) variance is added to approximate total predictive variance.
         if model_type == 'ucm':
             # already full predictive variance → do NOT add residual variance
             sigma_native = sigma_native
@@ -1072,9 +1078,6 @@ def rolling_crps(
         y_true = y_test.iloc[horizons - 1].values
         
         # ---- CRPS and PIT ----
-
-        # crps_vals = []
-        # pit_vals = []
         
         if distribution == 'normal':
             # Analytical CRPS for normal distribution
@@ -1084,11 +1087,12 @@ def rolling_crps(
             phi = stats.norm.pdf(z)
             Phi = stats.norm.cdf(z)
             crps_vals = sigma_h * (1.0 / np.sqrt(np.pi) - 2*phi - z*(2*Phi - 1))
+            crps_vals = np.maximum(crps_vals, 0)
             # PIT is simply the CDF
             pit_vals = stats.norm.cdf(y_true, loc=mu_h, scale=sigma_h)
 
         elif distribution == 't':
-            N_SAMPLES = 500
+            N_SAMPLES = 200
             crps_vals = []
             pit_vals = []
             

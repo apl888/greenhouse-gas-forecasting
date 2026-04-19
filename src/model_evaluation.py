@@ -1086,8 +1086,9 @@ def rolling_crps(
             z = (y_true - mu_h) / sigma_h
             phi = stats.norm.pdf(z)
             Phi = stats.norm.cdf(z)
-            crps_vals = sigma_h * (1.0 / np.sqrt(np.pi) - 2*phi - z*(2*Phi - 1))
-            crps_vals = np.maximum(crps_vals, 0)
+            crps_vals = sigma_h * (z * (2*Phi - 1) + 2*phi - 1.0 / np.sqrt(np.pi))
+            # crps_vals = sigma_h * (1.0 / np.sqrt(np.pi) - 2*phi - z*(2*Phi - 1))
+            # crps_vals = np.maximum(crps_vals, 0)
             # PIT is simply the CDF
             pit_vals = stats.norm.cdf(y_true, loc=mu_h, scale=sigma_h)
 

@@ -616,7 +616,14 @@ def fit_garch(residuals,
     if verbose:
         logger.info(f"Fitting GARCH({p},{q})")
         
-    scale = residuals.std()               # keeps sigma_t in the original units
+    scale = residuals.std(ddof=1)               # keeps sigma_t in the original units
+    
+    if not np.isfinite(scale) or scale < 1e-10:
+        raise ValueError(
+            f"GARCH fitting failed: residual std is {scale:.6g}."
+            "Check that the mean model is leaving non-trivial residuals."
+        )
+    
     resids_scaled = residuals / scale
 
     model = arch_model(resids_scaled,
@@ -967,6 +974,8 @@ def rolling_crps(
         term2 = np.mean(np.abs(samples[:, None] - samples[None, :]))
         return term1 - 0.5 * (N / (N - 1)) * term2
     
+    N_SAMPLES = 1000
+    
     if np.isscalar(horizons):
         horizons = [horizons]
     horizons = np.array(horizons)
@@ -978,6 +987,7 @@ def rolling_crps(
         np.random.seed(random_state)
         
     start_params = None
+    nu = None
     
     records = []
     iterator = rolling_origins(y, exog, start_train_size, H_MAX, step)
@@ -1072,8 +1082,24 @@ def rolling_crps(
         # ratio of conditional innovation std to constant residual std
         ratio = sigma_innov_vals / resid_sd
         # scale the predictive std: the innovation part is replaced by conditional volatility
-        sigma_h = sigma_native_h * ratio
+        if variance_type == 'garch':
+            # For GARCH: combine mean-model structural uncertainty (fc['sigma'],
+            # BEFORE resid_var was added in) with the GARCH conditional innovation
+            # SD in quadrature.  This avoids counting resid_var twice, since
+            # sigma_native_h already has resid_var baked in from the line above
+            # where sigma_native = sqrt(sigma_native**2 + resid_var).
+            fc_sigma_h = fc['sigma'].reindex(range(1, H_MAX + 1)).loc[horizons].values
+            fc_sigma_h = np.nan_to_num(fc_sigma_h, nan=0.0)
+            sigma_h = np.sqrt(fc_sigma_h**2 + sigma_innov_vals**2)
+        else:
+            # Static: ratio == 1.0 exactly, so sigma_h == sigma_native_h.
+            # Written this way to keep the ratio variable available for logging.
+            sigma_h = sigma_native_h * ratio
+
         sigma_h = np.maximum(sigma_h, 1e-10)
+        
+        # sigma_h = sigma_native_h * ratio
+        # sigma_h = np.maximum(sigma_h, 1e-10)
         
         y_true = y_test.iloc[horizons - 1].values
         
@@ -1087,13 +1113,10 @@ def rolling_crps(
             phi = stats.norm.pdf(z)
             Phi = stats.norm.cdf(z)
             crps_vals = sigma_h * (z * (2*Phi - 1) + 2*phi - 1.0 / np.sqrt(np.pi))
-            # crps_vals = sigma_h * (1.0 / np.sqrt(np.pi) - 2*phi - z*(2*Phi - 1))
-            # crps_vals = np.maximum(crps_vals, 0)
             # PIT is simply the CDF
             pit_vals = stats.norm.cdf(y_true, loc=mu_h, scale=sigma_h)
 
         elif distribution == 't':
-            N_SAMPLES = 200
             crps_vals = []
             pit_vals = []
             
@@ -1127,7 +1150,7 @@ def rolling_crps(
                 'sigma'         : sigma_h[i],
                 'sigma_native'  : sigma_native_h[i],
                 'y_true'        : y_true[i],
-                'ratio'         : ratio[i],
+                'innov_ratio'   : ratio[i],
                 'crps'          : crps_vals[i],
                 'pit'           : pit_vals[i],
                 'mean_model'    : model_type,

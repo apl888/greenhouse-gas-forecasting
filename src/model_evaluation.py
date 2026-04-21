@@ -1142,6 +1142,7 @@ def rolling_crps(
 
         # ---- store results ----
         for i, h in enumerate(horizons):
+            z = (y_true[i] - mu_h[i]) / sigma_h[i]
             records.append({
                 'origin'        : y.index[t],
                 'origin_idx'    : t,
@@ -1149,6 +1150,7 @@ def rolling_crps(
                 'mu'            : mu_h[i],
                 'sigma'         : sigma_h[i],
                 'sigma_native'  : sigma_native_h[i],
+                'z'             : z,
                 'y_true'        : y_true[i],
                 'innov_ratio'   : ratio[i],
                 'crps'          : crps_vals[i],

@@ -257,13 +257,13 @@ def fit_mean_model(y,
         
         model = SARIMAX(
             y_np,
-            exog=exog_np,
-            order=model_params['order'],
-            seasonal_order=model_params['seasonal_order'],
-            trend=model_params['trend'],
-            enforce_stationarity=model_params.get('enforce_stationarity', True),
-            enforce_invertibility=model_params.get('enforce_invertibility', True),
-            initialization=model_params.get('initialization', None)
+            exog                  = exog_np,
+            order                 = model_params['order'],
+            seasonal_order        = model_params['seasonal_order'],
+            trend                 = model_params['trend'],
+            enforce_stationarity  = model_params.get('enforce_stationarity', True),
+            enforce_invertibility = model_params.get('enforce_invertibility', True),
+            initialization        = model_params.get('initialization', None)
         )
 
         with warnings.catch_warnings():
@@ -299,18 +299,49 @@ def fit_mean_model(y,
         y_np = y.values
         exog_np = exog.values if exog is not None else None
 
-        model = UnobservedComponents(
-            endog=y_np,
-            exog=exog_np,
-            level=model_params.get('level', 'local level'),
-            seasonal=model_params.get('seasonal', None),
-            freq_seasonal=model_params.get('freq_seasonal', None),
-            stochastic_level=model_params.get('stochastic_level', True),
-            stochastic_trend=model_params.get('stochastic_trend', False),
-            stochastic_seasonal=model_params.get('stochastic_seasonal', False),
-            autoregressive=model_params.get('autoregressive', 0),
-            initialization=model_params.get('initialization', None)
+        # model = UnobservedComponents(
+        #     endog=y_np,
+        #     exog=exog_np,
+        #     level=model_params.get('level', 'local level'),
+        #     seasonal=model_params.get('seasonal', None),
+        #     freq_seasonal=model_params.get('freq_seasonal', None),
+        #     stochastic_level=model_params.get('stochastic_level', True),
+        #     stochastic_trend=model_params.get('stochastic_trend', False),
+        #     stochastic_seasonal=model_params.get('stochastic_seasonal', False),
+        #     stochastic_freq_seasonal=model_params.get('stochastic_freq_seasonal', None),
+        #     autoregressive=model_params.get('autoregressive', 0),
+        #     initialization=model_params.get('initialization', None)
+        # )
+        
+        # Build kwargs dynamically to avoid passing conflicting parameters.
+        # When 'level' is a string shortcut (e.g. 'deterministic trend',
+        # 'local linear trend'), it already encodes stochastic_level and
+        # stochastic_trend — passing those booleans simultaneously causes
+        # silent conflicts. Only pass booleans when level=True (manual mode).
+        level_val = model_params.get('level', 'local level')
+        
+        ucm_kwargs = dict(
+            endog                   = y_np,
+            exog                    = exog_np,
+            level                   = level_val,
+            freq_seasonal           = model_params.get('freq_seasonal', None),
+            stochastic_freq_seasonal= model_params.get('stochastic_freq_seasonal', None),
+            autoregressive          = model_params.get('autoregressive', None),
+            cycle                   = model_params.get('cycle', False),
+            stochastic_cycle        = model_params.get('stochastic_cycle', False),
+            initialization          = model_params.get('initialization', None)
         )
+        
+        # Only pass stochastic booleans when using manual boolean mode
+        # (i.e. level=True, not a string). String mode encodes these internally.
+        if level_val is True:
+            ucm_kwargs['trend']               = model_params.get('trend', False)
+            ucm_kwargs['stochastic_level']    = model_params.get('stochastic_level', False)
+            ucm_kwargs['stochastic_trend']    = model_params.get('stochastic_trend', False)
+            ucm_kwargs['stochastic_seasonal'] = model_params.get('stochastic_seasonal', False)
+            ucm_kwargs['irregular']           = model_params.get('irregular', True)
+
+        model = UnobservedComponents(**ucm_kwargs)
 
         try:
             results = model.fit(
@@ -325,10 +356,10 @@ def fit_mean_model(y,
             print(f"Warning: Primary fit failed at a rolling window, Switching to 'powell' method. Error: {e}")
             
             results = model.fit(
-                start_params=start_params,
-                disp=False,
-                method='powell',
-                maxiter=model_params.get('maxiter', 300)
+                start_params = start_params,
+                disp         = False,
+                method       = 'powell',
+                maxiter      = model_params.get('maxiter', 300)
             )
 
         # residuals (align with index)
@@ -341,19 +372,19 @@ def fit_mean_model(y,
 
     elif model_type == 'ets':
         model_params = {**model_params, 'auto':False}
-        model = AutoETS(**model_params)
-        results = model.fit(y)
+        model        = AutoETS(**model_params)
+        results      = model.fit(y)
 
         # in-sample fitted values
-        fh = ForecastingHorizon(y.index, is_relative=False)
+        fh          = ForecastingHorizon(y.index, is_relative=False)
         fitted_vals = results.predict(fh)
-        resid = (y - fitted_vals).dropna()
+        resid       = (y - fitted_vals).dropna()
         fitted_vals = fitted_vals.loc[resid.index]
 
     elif model_type == 'tbats':
-        model = TBATS(**model_params)
-        results = model.fit(y)
-        resid = results.predict_residuals().dropna()
+        model       = TBATS(**model_params)
+        results     = model.fit(y)
+        resid       = results.predict_residuals().dropna()
         fitted_vals = y.loc[resid.index] - resid
 
     else:
@@ -1038,30 +1069,8 @@ def rolling_crps(
                 nu = 5.0 if nu is None else nu # fallback
         else:
             nu = None
-        
-        # convert mean forecast variance into full predictive variance
-        # var_pred_mean reflects uncertainty in the predicted mean from the state-space model.
-        # residual (innovation) variance is added to approximate total predictive variance.
-        if model_type == 'ucm':
-            # already full predictive variance → do NOT add residual variance
-            sigma_native = sigma_native
-        else:
-            sigma_native = np.sqrt(sigma_native**2 + resid_var)
-
-        # variance model: static or GARCH (fit once per origin)
-        if variance_type == 'static':
-            # constant innovation variance
-            sigma_innov_vals = np.full(len(horizons), resid_sd)
-
-        elif variance_type == 'garch':
-            garch_res, scale = fit_garch(resid, **(variance_params or {}))
-            var_fcst = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            sigma_innov_vals = np.sqrt(var_fcst.iloc[h_idx].values) * scale
             
-        else:
-            raise ValueError('Unknown variance_type')
-        
-        # ---- score all horizons (vectorized) ----
+        # ---- extract sigma_native at requested horizons ----
         mu_h = mu.loc[horizons].values
         sigma_native_h = sigma_native.loc[horizons].values
 
@@ -1077,30 +1086,47 @@ def rolling_crps(
                 if verbose:
                     print(f"Warning: NaN sigma_native and zero residual variance at origin {t}. Skipping.")
                 continue
-
+            
+        # ---- fit GARCH if needed (once per origin) ----
+        if variance_type == 'garch':
+            garch_res, scale = fit_garch(resid, **(variance_params or {}))
+            var_fcst         = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
+            sigma_innov_vals = np.sqrt(var_fcst.iloc[h_idx].values) * scale
+        elif variance_type == 'static':
+            sigma_innov_vals = np.full(len(horizons), resid_sd)
+        else:
+            raise ValueError(f'Unknown variance_type: {variance_type}')
+        
         # innovation variance ratios
         # ratio of conditional innovation std to constant residual std
-        ratio = sigma_innov_vals / resid_sd
-        # scale the predictive std: the innovation part is replaced by conditional volatility
-        if variance_type == 'garch':
-            # For GARCH: combine mean-model structural uncertainty (fc['sigma'],
-            # BEFORE resid_var was added in) with the GARCH conditional innovation
-            # SD in quadrature.  This avoids counting resid_var twice, since
-            # sigma_native_h already has resid_var baked in from the line above
-            # where sigma_native = sqrt(sigma_native**2 + resid_var).
-            fc_sigma_h = fc['sigma'].reindex(range(1, H_MAX + 1)).loc[horizons].values
-            fc_sigma_h = np.nan_to_num(fc_sigma_h, nan=0.0)
-            sigma_h = np.sqrt(fc_sigma_h**2 + sigma_innov_vals**2)
+        ratio = sigma_innov_vals / resid_sd     
+        
+        # ---- combine structural and innovation uncertainty ----
+        # The combination rule differs between UCM and other models because
+        # UCM's Kalman sigma_native does NOT include innovation variance,
+        # while SARIMA/ETS sigma_native already has resid_var baked in.
+        if model_type == 'ucm':
+            # sigma_native_h = pure Kalman state uncertainty (no innovation)
+            # Add innovation variance (static or GARCH) in quadrature
+            sigma_h = np.sqrt(sigma_native_h**2 + sigma_innov_vals**2)
         else:
-            # Static: ratio == 1.0 exactly, so sigma_h == sigma_native_h.
-            # Written this way to keep the ratio variable available for logging.
-            sigma_h = sigma_native_h * ratio
-
+            # Non-UCM: sigma_native already includes resid_var (added above).
+            # For static: sigma_innov_vals == resid_sd, ratio == 1.0,
+            #             so sigma_h == sigma_native_h (no double-counting).
+            # For GARCH:  remove the constant resid_var already baked in,
+            #             replace with GARCH conditional variance.
+            if variance_type == 'garch':
+                # fc['sigma'] = raw model sigma BEFORE resid_var was added
+                fc_sigma_h = fc['sigma'].reindex(range(1, H_MAX + 1)).loc[horizons].values
+                fc_sigma_h = np.nan_to_num(fc_sigma_h, nan=0.0)
+                sigma_h    = np.sqrt(fc_sigma_h**2 + sigma_innov_vals**2)
+            else:
+                # static: ratio == 1.0, equivalent to sigma_nativ_h unchanged
+                sigma_h = sigma_native_h * ratio
+        
         sigma_h = np.maximum(sigma_h, 1e-10)
-        
-        # sigma_h = sigma_native_h * ratio
-        # sigma_h = np.maximum(sigma_h, 1e-10)
-        
+            
+        # ---- score all horizons ----
         y_true = y_test.iloc[horizons - 1].values
         
         # ---- CRPS and PIT ----
@@ -1118,7 +1144,7 @@ def rolling_crps(
 
         elif distribution == 't':
             crps_vals = []
-            pit_vals = []
+            pit_vals  = []
             
             for i in range(len(horizons)):
                 # For a t‑distribution with standard deviation sigma_h,

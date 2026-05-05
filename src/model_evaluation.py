@@ -422,7 +422,6 @@ def forecast_mean_model(
         end = results.nobs + horizon - 1 
         fc = results.get_prediction(start=start, end=end, exog=exog_np)
         
-        # fc = results.get_forecast(steps=horizon, exog=exog_np)
         index = pd.RangeIndex(1, horizon + 1, name='step')
         mean = pd.Series(np.asarray(fc.predicted_mean), index=index)
         # Use full forecast error variance (includes innovation + parameter uncertainty)
@@ -465,12 +464,20 @@ def forecast_mean_model(
         try:
             intervals = results.predict_interval(fh, coverage=0.95)
             
-            sigma_vals = (intervals.iloc[:,1] - intervals.iloc[:,0]) / (2 * 1.96)
-            
-            sigma = pd.Series(np.asarray(sigma_vals), index=index)
-            
-        except (AttributeError, NotImplementedError):
-            sigma = pd.Series(np.nan, index=mean.index)
+            # guard against shape mismatches
+            if intervals.shape[0] != horizon:
+                raise ValueError(
+                    f"predict_interval returned {intervals.shape[0]} rows, "
+                    f"expected {horizon}"
+                )
+    
+            sigma_vals = (intervals.iloc[:, 1] - intervals.iloc[:, 0]) / (2 * 1.96)
+            sigma      = pd.Series(np.asarray(sigma_vals), index=index)
+
+        except (AttributeError, NotImplementedError, ValueError) as e:
+            if verbose:
+                print(f"Warning: predict_interval failed ({e}). Using NaN sigma.")
+            sigma     = pd.Series(np.nan, index=mean.index)
             intervals = None
 
     else:
@@ -1001,9 +1008,10 @@ def rolling_crps(
     def crps_sample(y_obs, samples):
         N = len(samples)
         term1 = np.mean(np.abs(samples - y_obs))
-        # N / (N - 1) factor gives unbiased and fair CRPS estimator
-        term2 = np.mean(np.abs(samples[:, None] - samples[None, :]))
-        return term1 - 0.5 * (N / (N - 1)) * term2
+        samples_sorted = np.sort(samples)
+        weights = (2 * np.arange(1, N + 1) - N - 1) / (N * (N - 1))
+        term2 = np.dot(weights, samples_sorted)
+        return term1 - term2
     
     N_SAMPLES = 1000
     
@@ -1109,21 +1117,33 @@ def rolling_crps(
             # sigma_native_h = pure Kalman state uncertainty (no innovation)
             # Add innovation variance (static or GARCH) in quadrature
             sigma_h = np.sqrt(sigma_native_h**2 + sigma_innov_vals**2)
-        else:
-            # Non-UCM: sigma_native already includes resid_var (added above).
-            # For static: sigma_innov_vals == resid_sd, ratio == 1.0,
-            #             so sigma_h == sigma_native_h (no double-counting).
-            # For GARCH:  remove the constant resid_var already baked in,
-            #             replace with GARCH conditional variance.
+            
+        elif model_type == 'sarima':
+            # var_pred_mean already includes innovation variance from the
+            # state-space recursion. For static, sigma_h = sigma_native_h.
+            # For GARCH, replace the constant innovation component with the
+            # conditional one. We approximate the non-innovation part of
+            # sigma_native as fc_sigma (raw Kalman without resid_var),
+            # which for SARIMA is not directly separable — best approximation
+            # is to use sigma_native_h directly and scale by GARCH ratio.
             if variance_type == 'garch':
-                # fc['sigma'] = raw model sigma BEFORE resid_var was added
-                fc_sigma_h = fc['sigma'].reindex(range(1, H_MAX + 1)).loc[horizons].values
-                fc_sigma_h = np.nan_to_num(fc_sigma_h, nan=0.0)
-                sigma_h    = np.sqrt(fc_sigma_h**2 + sigma_innov_vals**2)
-            else:
-                # static: ratio == 1.0, equivalent to sigma_nativ_h unchanged
                 sigma_h = sigma_native_h * ratio
-        
+            else:
+                sigma_h = sigma_native_h   # ratio == 1.0
+
+        elif model_type in ('ets', 'tbats'):
+            # predict_interval gives full predictive sigma.
+            # For static: use as-is.
+            # For GARCH: scale by ratio to replace constant innovation
+            # with conditional volatility estimate.
+            if variance_type == 'garch':
+                sigma_h = sigma_native_h * ratio
+            else:
+                sigma_h = sigma_native_h   # ratio == 1.0
+
+        else:
+            raise ValueError(f'Unknown model_type for sigma combination: {model_type}')
+
         sigma_h = np.maximum(sigma_h, 1e-10)
             
         # ---- score all horizons ----

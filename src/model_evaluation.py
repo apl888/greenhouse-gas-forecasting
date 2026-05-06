@@ -591,7 +591,9 @@ def residual_diagnostics(
         'ljung_box'  : lb,
         'jb_pvalue'  : jb_p,
         'adf_pvalue' : adf_p,
-        'arch_pvalue': arch_p
+        'arch_pvalue': arch_p,
+        'skew'       : residuals.skew(),
+        'kurtosis'   : residuals.kurtosis()
     }
     
     if return_results:

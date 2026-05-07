@@ -498,7 +498,8 @@ def residual_diagnostics(
     burnin=0,
     title='', 
     plot=True,
-    return_results=False
+    return_results=False,
+    verbose=True
     ):
     """
     Model-agnostic residual diagnostics.
@@ -529,13 +530,14 @@ def residual_diagnostics(
     # burnin = seasonal period (e.g. 52) for ARIMA models
     # burnin = 0 for ETS and TBATS models
     
-    print(f"\n=== Residual Diagnostics: {title} ===")
+    if verbose:
+        print(f"\n=== Residual Diagnostics: {title} ===")
 
-    # --- Summary stats ---
-    print(f"Mean    : {residuals.mean():.5f}")
-    print(f"Std     : {residuals.std():.5f}")
-    print(f"Skew    : {residuals.skew():.3f}")
-    print(f"Kurtosis: {residuals.kurtosis():.3f}")
+        # --- Summary stats ---
+        print(f"Mean    : {residuals.mean():.5f}")
+        print(f"Std     : {residuals.std():.5f}")
+        print(f"Skew    : {residuals.skew():.3f}")
+        print(f"Kurtosis: {residuals.kurtosis():.3f}")
 
     # --- Normality ---
     jb_stat, jb_p, _, _ = jarque_bera(residuals)

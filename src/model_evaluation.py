@@ -541,24 +541,28 @@ def residual_diagnostics(
 
     # --- Normality ---
     jb_stat, jb_p, _, _ = jarque_bera(residuals)
-    print(f"\nJarque-Bera p-value: {jb_p:.4f}")
+    if verbose:
+        print(f"\nJarque-Bera p-value: {jb_p:.4f}")
 
     # --- Autocorrelation ---
     lb = acorr_ljungbox(residuals, 
                         lags=[1, 4, 13, 26, 52], 
                         return_df=True)
-    print("\nLjung-Box p-values:")
-    for lag in lb.index:
-        print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
+    if verbose:
+        print("\nLjung-Box p-values:")
+        for lag in lb.index:
+            print(f"  lag {lag}: p = {lb.loc[lag, 'lb_pvalue']:.4f}")
         
     # --- Conditional heteroscedasticity ---   
     arch_stat, arch_p, _, _ = het_arch(residuals, nlags=52)
-    print(f"\nEngle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
+    if verbose: 
+        print(f"\nEngle's ARCH test (nlags=52) p-value: {arch_p:.4e}")
 
     # --- Stationarity ---
     adf_p = None
     if len(residuals) > 50:
         adf_p = adfuller(residuals, autolag='AIC')[1]
+    if verbose:
         print(f"\nADF p-value: {adf_p:.4f}")
 
     if plot:       

@@ -1107,48 +1107,30 @@ def rolling_crps(
         if variance_type == 'garch':
             garch_res, scale = fit_garch(resid, **(variance_params or {}))
             var_fcst         = garch_res.forecast(horizon=H_MAX).variance.iloc[-1]
-            sigma_innov_vals = np.sqrt(var_fcst.iloc[h_idx].values) * scale
+            if len(var_fcst) < H_MAX:
+                if verbose:
+                    print(f"Warning: GARCH forecast short at t={t}. Using resid_sd.")
+                sigma_innov_vals = np.full(len(horizons), resid_sd)
+            else:
+                sigma_innov_vals = np.sqrt(var_fcst.iloc[h_idx].values) * scale
         elif variance_type == 'static':
             sigma_innov_vals = np.full(len(horizons), resid_sd)
         else:
-            raise ValueError(f'Unknown variance_type: {variance_type}')
+            raise ValueError(f"Unknown variance_type: {variance_type}")
         
         # innovation variance ratios
         # ratio of conditional innovation std to constant residual std
+        # ratio = 1.0 for static (no change to sigma_native_h)
+        # ratio = GARCH_vol / resid_sd for garch (scales intervals with volatility)
         ratio = sigma_innov_vals / resid_sd     
         
         # ---- combine structural and innovation uncertainty ----
-        # The combination rule differs between UCM and other models because
-        # UCM's Kalman sigma_native does NOT include innovation variance,
-        # while SARIMA/ETS sigma_native already has resid_var baked in.
-        if model_type == 'ucm':
-            # sigma_native_h = pure Kalman state uncertainty (no innovation)
-            # Add innovation variance (static or GARCH) in quadrature
-            sigma_h = np.sqrt(sigma_native_h**2 + sigma_innov_vals**2)
-            
-        elif model_type == 'sarima':
-            # var_pred_mean already includes innovation variance from the
-            # state-space recursion. For static, sigma_h = sigma_native_h.
-            # For GARCH, replace the constant innovation component with the
-            # conditional one. We approximate the non-innovation part of
-            # sigma_native as fc_sigma (raw Kalman without resid_var),
-            # which for SARIMA is not directly separable — best approximation
-            # is to use sigma_native_h directly and scale by GARCH ratio.
-            if variance_type == 'garch':
-                sigma_h = sigma_native_h * ratio
-            else:
-                sigma_h = sigma_native_h   # ratio == 1.0
-
-        elif model_type in ('ets', 'tbats'):
-            # predict_interval gives full predictive sigma.
-            # For static: use as-is.
-            # For GARCH: scale by ratio to replace constant innovation
-            # with conditional volatility estimate.
-            if variance_type == 'garch':
-                sigma_h = sigma_native_h * ratio
-            else:
-                sigma_h = sigma_native_h   # ratio == 1.0
-
+        # var_pred_mean from get_prediction() is the COMPLETE predictive
+        # variance for both UCM and SARIMA — it includes observation noise.
+        # Do NOT add resid_var again. For GARCH, scale by ratio to replace
+        # constant innovation volatility with conditional volatility.
+        if model_type in ('ucm', 'sarima', 'ets', 'tbats'):
+            sigma_h = sigma_native_h * ratio # ratio = 1.0 for static
         else:
             raise ValueError(f'Unknown model_type for sigma combination: {model_type}')
 

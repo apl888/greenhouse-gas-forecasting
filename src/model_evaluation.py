@@ -242,7 +242,7 @@ def fit_mean_model(y,
                    verbose=False):
     """
     Fits a mean model and returns a fitted object.
-    Supported models: 'sarima', 'ets', 'tbats'
+    Supported models: 'sarima', 'UC', 'ets', 'tbats'
     """
 
     if verbose:
@@ -290,7 +290,8 @@ def fit_mean_model(y,
             
         # Return residuals/fitted as Series with original index
         resid = pd.Series(results.resid, index=y.index).dropna()
-        resid= resid.iloc[results.loglikelihood_burn:]
+        burnin = results.loglikelihood_burn
+        resid = resid.iloc[burnin:]
         fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
         
         start_params = results.params
@@ -362,11 +363,18 @@ def fit_mean_model(y,
                 maxiter      = model_params.get('maxiter', 300)
             )
 
-        # residuals (align with index)
+        # add burnin trim:
         resid = pd.Series(results.resid, index=y.index).dropna()
 
-        # fitted values
-        fitted_vals = pd.Series(results.fittedvalues, index=y.index).loc[resid.index]
+        # trim Kalman filter initialization period
+        # loglikelihood_burn gives the number of observations used for initialization
+        burnin = results.loglikelihood_burn
+        resid  = resid.iloc[burnin:]
+
+        fitted_vals = pd.Series(
+            results.fittedvalues, 
+            index=y.index
+        ).loc[resid.index]
 
         start_params = results.params
 

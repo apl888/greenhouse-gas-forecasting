@@ -299,20 +299,6 @@ def fit_mean_model(y,
     elif model_type == 'ucm':
         y_np = y.values
         exog_np = exog.values if exog is not None else None
-
-        # model = UnobservedComponents(
-        #     endog=y_np,
-        #     exog=exog_np,
-        #     level=model_params.get('level', 'local level'),
-        #     seasonal=model_params.get('seasonal', None),
-        #     freq_seasonal=model_params.get('freq_seasonal', None),
-        #     stochastic_level=model_params.get('stochastic_level', True),
-        #     stochastic_trend=model_params.get('stochastic_trend', False),
-        #     stochastic_seasonal=model_params.get('stochastic_seasonal', False),
-        #     stochastic_freq_seasonal=model_params.get('stochastic_freq_seasonal', None),
-        #     autoregressive=model_params.get('autoregressive', 0),
-        #     initialization=model_params.get('initialization', None)
-        # )
         
         # Build kwargs dynamically to avoid passing conflicting parameters.
         # When 'level' is a string shortcut (e.g. 'deterministic trend',

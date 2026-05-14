@@ -725,7 +725,7 @@ def rolling_origin_evaluation(
     model_type,
     model_params,
     exog=None,
-    start_train_size=156,
+    start_train_size=260,
     horizons=(1, 13, 26, 52),
     step=13,
     sp=52,
@@ -948,7 +948,7 @@ def rolling_crps(
     variance_type='static',  # 'static' or 'garch'
     variance_params=None,
     exog=None,
-    start_train_size=156,
+    start_train_size=260,
     horizons=(1,13,26,52),
     step=13,
     start_params=None,

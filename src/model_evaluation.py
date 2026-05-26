@@ -1309,11 +1309,11 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     # HAC variance estimate (accounts for autocorrelation in loss differential)
     # use Newey-West with h-1 lags as recommended by Harvey et al. (1997)
     n_lags = h - 1
-    gamma0 = np.var(d, ddof=1)
+    gamma0 = np.mean((d - d_mean)**2)
     
     if n_lags > 0:
         gammas = [
-            np.cov(d[lag:], d[:-lag])[0, 1]
+            np.mean((d[lag:] - d_mean) * (d[:-lag] - d_mean))
             for lag in range(1, n_lags + 1)
         ]
         hac_var = gamma0 + 2 * sum(gammas)

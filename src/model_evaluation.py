@@ -1279,69 +1279,68 @@ def garch_adjusted_coverage(
 # 12. Diebold–Mariano test
 # =========================================================
 
-def diebold_mariano(e1, e2, h=1, loss='mse'):
+def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     """
-    Diebold-Mariano test with Newey-West (HAC) variance correction.
-    H0: two competing forecast methods have the same level of forecast accuracy
-
+    Diebold-Mariano test for equal predictive accuracy.
+    
+    Tests H0: E[d_t] = 0 where d_t = L(e_a,t) - L(e_b,t)
+    Using squared error loss: L(e) = e²
+    
     Parameters
     ----------
-    e1, e2 : array-like
-        Forecast errors from model A and model B (aligned by origin).
-    h : int
-        Forecast horizon.
-    loss : {"mae", "mse"}
-        Loss function used in comparison.
-
+    errors_a : array  forecast errors from model A (y_true - y_pred)
+    errors_b : array  forecast errors from model B
+    h        : int    forecast horizon (for HAC correction)
+    alternative: 'two-sided', 'less' (A better than B), 'greater'
+    
     Returns
     -------
-    dm_stat : float
-        DM test statistic.
-    p_value : float
-        Two-sided p-value.
+    dict with DM statistic, p-value, and interpretation
     """
-    e1 = np.asarray(e1)
-    e2 = np.asarray(e2)
+    errors_a = np.asarray(errors_a)
+    errors_b = np.asarray(errors_b)
     
-    if loss == 'mse':
-        d = e1**2 - e2**2
-    elif loss == 'mae':
-        d = np.abs(e1) - np.abs(e2)
-    else:
-        raise ValueError("loss must be 'mse' or 'mae'")
-
-    T = len(d)
-    mean_d = np.mean(d)
-
-    # HAC variance (Newey–West)
-    max_lag = h - 1
+    # loss differential: squared error difference
+    d = errors_a**2 - errors_b**2
+    
+    n  = len(d)
+    d_mean = d.mean()
+    
+    # HAC variance estimate (accounts for autocorrelation in loss differential)
+    # use Newey-West with h-1 lags as recommended by Harvey et al. (1997)
+    n_lags = h - 1
     gamma0 = np.var(d, ddof=1)
-
-    var_d = gamma0
     
-    if var_d <= 1e-12:
-        return np.nan, np.nan
+    if n_lags > 0:
+        gammas = [
+            np.cov(d[lag:], d[:-lag])[0, 1]
+            for lag in range(1, n_lags + 1)
+        ]
+        hac_var = gamma0 + 2 * sum(gammas)
+    else:
+        hac_var = gamma0
     
-    for lag in range(1, max_lag + 1):
-        weight = 1 - lag / (max_lag + 1)
-        cov = np.cov(d[lag:], d[:-lag], ddof=1)[0, 1]
-        var_d += 2 * weight * cov
-
-    dm_stat = mean_d / np.sqrt(var_d / T)
-    p_value = 2 * (1 - stats.norm.cdf(np.abs(dm_stat)))
-
-    return dm_stat, p_value
-
-# Example notebook usage:
-#
-# errors_A = y_test - mean_model_A
-# errors_B = y_test - mean_model_B
-#
-# dm_stat, p_val = diebold_mariano(
-#     errors_A,
-#     errors_B,
-#     loss="mae"
-# )
+    # Harvey et al. (1997) small-sample correction
+    hac_var_corrected = (n + 1 - 2*h + h*(h-1)/n) / n * hac_var
+    
+    dm_stat = d_mean / np.sqrt(hac_var_corrected / n)
+    
+    # t-distribution with n-1 degrees of freedom (Harvey et al. 1997)
+    if alternative == 'two-sided':
+        p_value = 2 * stats.t.sf(abs(dm_stat), df=n-1)
+    elif alternative == 'less':
+        p_value = stats.t.sf(dm_stat, df=n-1)
+    else:
+        p_value = stats.t.cdf(dm_stat, df=n-1)
+    
+    return {
+        'dm_stat' : round(dm_stat, 4),
+        'p_value' : round(p_value, 4),
+        'n'       : n,
+        'significant_05': p_value < 0.05,
+        'significant_10': p_value < 0.10,
+        'direction': 'A better' if dm_stat < 0 else 'B better'
+    }
 
 # =========================================================
 # 13. Interval coverage

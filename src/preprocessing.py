@@ -51,7 +51,7 @@ class GasPreprocessor:
                  gas_name, 
                  seasonal_period=52, 
                  resample_freq=None,
-                 window=7, 
+                 window=1, 
                  iqr_factor=1.5, 
                  interpolate_method='linear', 
                  lags=52, 
@@ -437,6 +437,8 @@ class GasPreprocessor:
                 raise ValueError(f'Unsupported transformation for inverse: {self.transformation}')
 
     def _smooth_series(self, series):
+        if self.window <= 1:
+            return series  # no smoothing applied
         return series.rolling(window=self.window, center=True, min_periods=1).median()
 
     def _interpolate_series(self, series):

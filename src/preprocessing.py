@@ -326,7 +326,7 @@ class GasPreprocessor:
         pd.Series: Transformed gas time series.
         '''
         self.fit(df, custom_title=custom_title)  
-        return self.transform(df, custom_title=custom_title)
+        return self.cleaned_series_
     
     def inverse_transform(self, series):
         '''

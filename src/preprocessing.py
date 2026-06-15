@@ -54,7 +54,7 @@ class GasPreprocessor:
                  window=1, 
                  iqr_factor=1.5, 
                  interpolate_method='linear', 
-                 lags=52, 
+                 lags=110, 
                  do_eda=False, 
                  transformation=None, 
                  bc_lambda=None):
@@ -672,9 +672,9 @@ class GasPreprocessor:
         safe_lags = min(self.lags, len(series_clean) - 1)
         
         # plot
-        plt.figure(figsize=(12,4))
+        plt.figure(figsize=(12,6))
         
-        plt.subplot(1,2,1)
+        plt.subplot(2,1,1)
         plot_acf(series_clean, ax=plt.gca(), lags=safe_lags)
         plt.title(f'ACF Plot of {title_suffix}', fontsize=16, y=1.10)
         plt.ylabel('Autocorrelation Coef', fontsize=16)
@@ -682,7 +682,7 @@ class GasPreprocessor:
         plt.yticks(fontsize=14)
         plt.xticks(fontsize=14)
         
-        plt.subplot(1,2,2)
+        plt.subplot(2,1,2)
         plot_pacf(series_clean, ax=plt.gca(), lags=safe_lags)
         plt.title(f'PACF Plot of {title_suffix}', fontsize=16, y=1.10)
         plt.ylabel('Partial Autocorrelation Coef', fontsize=16)

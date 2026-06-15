@@ -54,7 +54,7 @@ class GasPreprocessor:
                  window=1, 
                  iqr_factor=1.5, 
                  interpolate_method='linear', 
-                 lags=52, 
+                 lags=108, 
                  do_eda=False, 
                  transformation=None, 
                  bc_lambda=None):
@@ -82,8 +82,17 @@ class GasPreprocessor:
     def fit(self, df, custom_title=None):           
         print(f'\n[INFO] Fitting preprocessing for {self.gas_name}')
         print(f"[INFO] Starting fit() for {self.gas_name} | Resample freq = {self.resample_freq or 'None (using existing index)'}")
+        
         df = df.copy()
         
+        # Check for duplicate column names - this is a simple debugging step to make sure 
+        # that multiple columns were not created by fitting the GasPreprocessor more than once.
+        if df.columns.duplicated().any():
+            dupes = df.columns[df.columns.duplicated()].tolist()
+            raise ValueError(
+                f"Duplicate column names detected: {dupes}"
+            )
+
         # Allow either 'date' column or DatetimeIndex
         if 'date' in df.columns:
             df = df.set_index('date')
@@ -476,8 +485,8 @@ class GasPreprocessor:
         plt.close('all') # close any open figures to avoid ghost plots
     
         plt.figure(figsize=figsize)
-        plt.plot(raw_series, label='Raw Data', marker='.', markersize=3, color='#0072B2', linewidth=0.75, alpha=0.7)
-        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color="#F0950D", alpha=0.9)
+        plt.plot(raw_series, label='Raw Data', marker='.', markersize=3, color='#0072B2', linewidth=0.75, alpha=0.9)
+        plt.plot(processed_series, label='Smoothed, Resampled, & Interpolated', color="#F0950D", alpha=0.7)
         
         title = custom_title if custom_title else f'{self.gas_name} Time Series'
         plt.title(title, fontsize=title_fontsize)
@@ -580,26 +589,44 @@ class GasPreprocessor:
         plt.show()
     
         # ACF and PACF of residuals
-        plt.figure(figsize=(12,4))
+        acf_lags = min(self.lags, len(residuals_clean) - 1)
+        pacf_lags = min(self.lags, len(residuals_clean)//2 - 1)
+
+        fig, axes = plt.subplots(2, 1, figsize=(16, 8), sharex=True)
+
+        plot_acf(residuals_clean, lags=acf_lags, ax=axes[0])
+        axes[0].set_title(f'{self.gas_name}: STL Residual ACF')
+        # axes[1].set_ylabel('Autocorrelation Coef', fontsize=14)
+
+        plot_pacf(residuals_clean,lags=pacf_lags, ax=axes[1])
+        axes[1].set_title(f'{self.gas_name}: STL Residual PACF')
+
+        for ax in axes:
+            ax.set_ylabel('Autocorrelation Coef', fontsize=14)
+            
+            ax.axvline(self.seasonal_period, linestyle='--', alpha=0.7)
+            if 2 * self.seasonal_period <= self.lags:
+                ax.axvline(
+                    2 * self.seasonal_period,
+                    linestyle=':'
+                )
+
         
-        # calculate safe number of lags (must be less than the length of the series)
-        safe_lags = min(self.lags, len(residuals_clean) -1)
-        
-        plt.subplot(1,2,1)
-        plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
-        plt.title('ACF of Residuals', fontsize=16)
-        plt.ylabel('Autocorrelation Coef', fontsize=16)
-        plt.xlabel('Lag', fontsize=16)
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
+        # plt.subplot(1,2,1)
+        # plot_acf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
+        # plt.title('ACF of Residuals', fontsize=16)
+        # plt.ylabel('Autocorrelation Coef', fontsize=16)
+        # plt.xlabel('Lag', fontsize=16)
+        # plt.yticks(fontsize=14)
+        # plt.xticks(fontsize=14)
     
-        plt.subplot(1,2,2)
-        plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
-        plt.title('PACF of Residuals', fontsize=16)
-        plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
-        plt.xlabel('Lag', fontsize=16)
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
+        # plt.subplot(1,2,2)
+        # plot_pacf(stl_result.resid.dropna(), ax=plt.gca(), lags=safe_lags)
+        # plt.title('PACF of Residuals', fontsize=16)
+        # plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
+        # plt.xlabel('Lag', fontsize=16)
+        # plt.yticks(fontsize=14)
+        # plt.xticks(fontsize=14)
     
         plt.tight_layout()
         plt.show()
@@ -669,13 +696,14 @@ class GasPreprocessor:
             return
         
         # calculate safe number of lags
-        safe_lags = min(self.lags, len(series_clean) - 1)
+        acf_lags = min(self.lags, len(residuals_clean) - 1)
+        pacf_lags = min(self.lags, len(residuals_clean) // 2 - 1)
         
         # plot
         plt.figure(figsize=(12,6))
         
         plt.subplot(2,1,1)
-        plot_acf(series_clean, ax=plt.gca(), lags=safe_lags)
+        plot_acf(series_clean, ax=plt.gca(), lags=acf_lags)
         plt.title(f'ACF Plot of {title_suffix}', fontsize=16, y=1.10)
         plt.ylabel('Autocorrelation Coef', fontsize=16)
         plt.xlabel('Lag', fontsize=16)
@@ -683,7 +711,7 @@ class GasPreprocessor:
         plt.xticks(fontsize=14)
         
         plt.subplot(2,1,2)
-        plot_pacf(series_clean, ax=plt.gca(), lags=safe_lags)
+        plot_pacf(series_clean, ax=plt.gca(), lags=pacf_lags)
         plt.title(f'PACF Plot of {title_suffix}', fontsize=16, y=1.10)
         plt.ylabel('Partial Autocorrelation Coef', fontsize=16)
         plt.xlabel('Lag', fontsize=16)

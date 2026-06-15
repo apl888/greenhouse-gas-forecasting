@@ -54,7 +54,7 @@ class GasPreprocessor:
                  window=1, 
                  iqr_factor=1.5, 
                  interpolate_method='linear', 
-                 lags=104, 
+                 lags=52, 
                  do_eda=False, 
                  transformation=None, 
                  bc_lambda=None):

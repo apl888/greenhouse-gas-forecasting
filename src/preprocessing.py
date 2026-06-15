@@ -602,12 +602,14 @@ class GasPreprocessor:
 
         for ax in axes:
             ax.set_ylabel('Autocorrelation Coef', fontsize=14)
-            ax.legend(loc='upper right')
+            ax.set_xticks(fontsize=12)
             
             ax.axvline(self.seasonal_period, linestyle='--', alpha=0.7, label=f'lag {self.seasonal_period}')
             if 2 * self.seasonal_period <= self.lags:
                 ax.axvline(2 * self.seasonal_period, linestyle=':', label=f'lag {2*self.seasonal_period}')
-    
+            
+            ax.legend(loc='upper right', fontsize=12)
+        
         plt.tight_layout()
         plt.show()
         

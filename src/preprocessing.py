@@ -685,20 +685,20 @@ class GasPreprocessor:
         fig, axes = plt.subplots(2, 1, figsize=(16, 6), sharex=True)
 
         plot_acf(series_clean, lags=acf_lags, ax=axes[0])
-        axes[0].set_title(f'{self.gas_name}: STL Residual ACF', fontsize=16)
+        axes[0].set_title(f"CH4: {title_suffix} ACF",  fontsize=16)
 
         plot_pacf(series_clean, lags=pacf_lags, ax=axes[1])
-        axes[1].set_title(f'{self.gas_name}: STL Residual PACF', fontsize=16)
+        axes[1].set_title(f"CH4: {title_suffix} PACF", fontsize=16)
 
         for ax in axes:
-            ax.set_ylabel('Autocorrelation Coef', fontsize=14)
-            ax.tick_params(axis='x', labelsize=12)
+            ax.set_ylabel("Autocorrelation Coef", fontsize=14)
+            ax.tick_params(axis="x", labelsize=12)
                 
-            ax.axvline(self.seasonal_period, linestyle='--', color='red', alpha=0.8, label=f'lag {self.seasonal_period}')
+            ax.axvline(self.seasonal_period, linestyle="--", color="red", alpha=0.8, label=f"lag {self.seasonal_period}")
             if 2 * self.seasonal_period <= self.lags:
-                ax.axvline(2 * self.seasonal_period, linestyle=':', color='red', alpha=0.8, label=f'lag {2*self.seasonal_period}')
+                ax.axvline(2 * self.seasonal_period, linestyle=":", color="red", alpha=0.8, label=f"lag {2*self.seasonal_period}")
                 
-            ax.legend(loc='upper right', fontsize=12)
+            ax.legend(loc="upper right", fontsize=12)
             
         plt.tight_layout()
         plt.show()

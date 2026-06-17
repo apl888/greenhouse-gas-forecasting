@@ -684,10 +684,10 @@ class GasPreprocessor:
         # plot
         fig, axes = plt.subplots(2, 1, figsize=(16, 6), sharex=True)
 
-        plot_acf(residuals_clean, lags=acf_lags, ax=axes[0])
+        plot_acf(series_clean, lags=acf_lags, ax=axes[0])
         axes[0].set_title(f'{self.gas_name}: STL Residual ACF', fontsize=16)
 
-        plot_pacf(residuals_clean, lags=pacf_lags, ax=axes[1])
+        plot_pacf(series_clean, lags=pacf_lags, ax=axes[1])
         axes[1].set_title(f'{self.gas_name}: STL Residual PACF', fontsize=16)
 
         for ax in axes:

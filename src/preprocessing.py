@@ -678,8 +678,8 @@ class GasPreprocessor:
             return
         
         # calculate safe number of lags
-        acf_lags = min(self.lags, len(residuals_clean) - 1)
-        pacf_lags = min(self.lags, len(residuals_clean) // 2 - 1)
+        acf_lags = min(self.lags, len(series_clean) - 1)
+        pacf_lags = min(self.lags, len(series_clean) // 2 - 1)
         
         # plot
         fig, axes = plt.subplots(2, 1, figsize=(16, 6), sharex=True)

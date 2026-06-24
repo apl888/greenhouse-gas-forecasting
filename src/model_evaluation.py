@@ -588,12 +588,14 @@ def residual_diagnostics(
         plt.show()
 
     results = {
+        'mean'       : residuals.mean(),
+        'std'        : residuals.std(),
+        'skew'       : residuals.skew(),
+        'kurtosis'   : residuals.kurtosis(),
         'ljung_box'  : lb,
         'jb_pvalue'  : jb_p,
         'adf_pvalue' : adf_p,
-        'arch_pvalue': arch_p,
-        'skew'       : residuals.skew(),
-        'kurtosis'   : residuals.kurtosis()
+        'arch_pvalue': arch_p
     }
     
     if return_results:

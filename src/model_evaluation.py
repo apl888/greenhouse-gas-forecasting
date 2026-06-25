@@ -729,7 +729,7 @@ def rolling_origin_evaluation(
     exog=None,
     start_train_size=260,
     horizons=(1, 13, 26, 52),
-    step=13,
+    step=1,
     sp=52,
     checkpoint_path=None,
     start_params=None,
@@ -761,6 +761,9 @@ def rolling_origin_evaluation(
         Seasonal period used for calculating Seasonal Naive benchmarks.
     checkpoint_path : str, optional
         Path to a .pkl file for saving/loading progress to handle interruptions.
+    start_params: 
+        This is warm-starting — passing the previous fold's fitted parameters as starting 
+        values for the next fold's optimization. It speeds up convergence.
     random_state : int, optional
         Seed for reproducibility in stochastic models.
     verbose : bool, default False

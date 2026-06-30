@@ -365,8 +365,8 @@ def fit_mean_model(y,
         start_params = results.params
 
     elif model_type == 'ets':
-        model_params = {**model_params, 'auto':False}
-        model        = AutoETS(**model_params)
+        ets_params = {**model_params, 'auto':False}
+        model        = AutoETS(**ets_params)
         results      = model.fit(y)
 
         # in-sample fitted values

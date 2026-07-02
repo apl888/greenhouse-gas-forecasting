@@ -840,17 +840,24 @@ def rolling_origin_evaluation(
                 tqdm.write(f"Skipping fold t={t}: implausible forecast range [{mean.min():.1f}, {mean.max():.1f}]")
                 continue
 
+            # seasonal naive forecast
+            naive_fcst = seasonal_naive_forecast(
+                y_train=y_train.values,
+                horizon=H_MAX,
+                sp=sp
+            )
+    
             # loop over horizons
             for h in horizons:
                 y_true = y_test.iloc[h - 1]
                 y_pred = mean.iloc[h - 1]
 
                 # seasonal naive
-                naive_fcst = seasonal_naive_forecast(
-                    y_train=y_train.values,
-                    horizon=h,
-                    sp=sp
-                )
+                # naive_fcst = seasonal_naive_forecast(
+                #     y_train=y_train.values,
+                #     horizon=h,
+                #     sp=sp
+                # )
                 y_naive = naive_fcst[h - 1]
 
                 err = y_pred - y_true

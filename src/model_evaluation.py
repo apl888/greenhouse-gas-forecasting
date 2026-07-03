@@ -1325,7 +1325,7 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     if max_lags > 0:
         gammas = [
             np.mean((d[lag:] - d_mean) * (d[:-lag] - d_mean))
-            for lag in range(1, n_lags + 1)
+            for lag in range(1, max_lags + 1)
         ]
         hac_var = gamma0 + 2 * sum(gammas)
     else:

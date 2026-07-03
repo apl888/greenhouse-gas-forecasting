@@ -1289,6 +1289,8 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     """
     Diebold-Mariano test for equal predictive accuracy.
     
+    Follows Harvey et al. (1997)
+    
     Tests H0: E[d_t] = 0 where d_t = L(e_a,t) - L(e_b,t)
     Using squared error loss: L(e) = e²
     
@@ -1308,16 +1310,19 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     
     # loss differential: squared error difference
     d = errors_a**2 - errors_b**2
-    
     n  = len(d)
     d_mean = d.mean()
     
-    # HAC variance estimate (accounts for autocorrelation in loss differential)
-    # use Newey-West with h-1 lags as recommended by Harvey et al. (1997)
-    n_lags = h - 1
+    # HAC variance estimate (heteroscedasticity and autocorrelation consistent - accounts for autocorrelation in loss differential)
+    # Cap HAC lags: use min of (h-1) and data-driven bound
+    # When n is small relative to h, h-1 lags produces negative HAC variance.
+    # The n^(1/3) rule (Andrews 1991) is a standard data-driven alternative.
+    # Taking the min ensures we never request more lags than the data can support.
+    max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
+    
     gamma0 = np.mean((d - d_mean)**2)
     
-    if n_lags > 0:
+    if max_lags > 0:
         gammas = [
             np.mean((d[lag:] - d_mean) * (d[:-lag] - d_mean))
             for lag in range(1, n_lags + 1)
@@ -1326,8 +1331,29 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     else:
         hac_var = gamma0
     
+     # Guard against numerical issues producing non-positive variance
+    if hac_var <= 0:
+        return {
+            'dm_stat'       : np.nan,
+            'p_value'       : np.nan,
+            'n'             : n,
+            'max_lags_used' : max_lags,
+            'significant_05': False,
+            'significant_10': False,
+            'direction'     : 'indeterminate',
+            'note'          : 'Non-positive HAC variance — insufficient data for DM test at this horizon'
+        }
+    
     # Harvey et al. (1997) small-sample correction
-    hac_var_corrected = (n + 1 - 2*h + h*(h-1)/n) / n * hac_var
+    # Guard against negative correction factor when h is large relative to n
+    correction = (n + 1 - 2*h + h*(h-1)/n) / n
+    if correction <= 0:
+        # Fall back to standard variance without small-sample correction
+        hac_var_corrected = hac_var
+        correction_applied = False
+    else:
+        hac_var_corrected = correction * hac_var
+        correction_applied = True
     
     dm_stat = d_mean / np.sqrt(hac_var_corrected / n)
     
@@ -1340,12 +1366,14 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
         p_value = stats.t.cdf(dm_stat, df=n-1)
     
     return {
-        'dm_stat' : round(dm_stat, 4),
-        'p_value' : round(p_value, 4),
-        'n'       : n,
-        'significant_05': p_value < 0.05,
-        'significant_10': p_value < 0.10,
-        'direction': 'A better' if dm_stat < 0 else 'B better'
+        'dm_stat'           : round(dm_stat, 4),
+        'p_value'           : round(p_value, 4),
+        'n'                 : n,
+        'max_lags_used'     : max_lags,
+        'significant_05'    : p_value < 0.05,
+        'significant_10'    : p_value < 0.10,
+        'direction'         : 'A better' if dm_stat < 0 else 'B better',
+        'correction_applied': correction_applied
     }
 
 # =========================================================

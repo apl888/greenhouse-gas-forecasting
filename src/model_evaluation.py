@@ -1336,11 +1336,15 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
         }
 
     # Adaptive bandwidth selection:
-    # Cap HAC lags: use min of (h-1) and data-driven bound
+    # Cap HAC lags: Use h-1 lags when sample is large enough to support them
     # When n is small relative to h, h-1 lags produces negative HAC variance.
     # The n^(1/3) rule (Andrews 1991) is a standard data-driven alternative.
     # Taking the min ensures we never request more lags than the data can support.
-    max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
+    min_n_for_full_lags = 10 * h # rule of thumb: at least 10 obs per lag
+    if n >= min_n_for_full_lags:
+        max_lags = max(0, h - 1)
+    else:    
+        max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
         
     if np.allclose(d, 0):
         return {

@@ -1410,7 +1410,7 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     elif alternative == 'greater':
         p_value = stats.t.cdf(dm_stat, df=n-1)
     else:
-        raise ValueError(\"alternative must be 'two-sided', 'less', or 'greater'\")
+        raise ValueError("alternative must be 'two-sided', 'less', or 'greater")
     
     return {
         'dm_stat'           : round(dm_stat, 4),

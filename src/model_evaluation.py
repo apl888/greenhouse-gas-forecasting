@@ -1340,7 +1340,8 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     # When n is small relative to h, h-1 lags produces negative HAC variance.
     # The n^(1/3) rule (Andrews 1991) is a standard data-driven alternative.
     # Taking the min ensures we never request more lags than the data can support.
-    min_n_for_full_lags = 10 * h # rule of thumb: at least 10 obs per lag
+    min_obs_per_lag = 10
+    min_n_for_full_lags = min_obs_per_lag * h # rule of thumb: at least 10 obs per lag
     if n >= min_n_for_full_lags:
         max_lags = max(0, h - 1)
     else:    

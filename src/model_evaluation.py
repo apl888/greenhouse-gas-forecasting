@@ -956,7 +956,7 @@ def rolling_crps(
     exog=None,
     start_train_size=260,
     horizons=(1,13,26,52),
-    step=13,
+    step=1,
     start_params=None,
     random_state=None,
     verbose=False, 

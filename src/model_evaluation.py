@@ -64,6 +64,64 @@ if not logger.hasHandlers:
     logger.addHandler(handler)
 
 # =========================================================
+# Checkpoint path helper function
+# =========================================================
+
+def make_checkpoint_path(
+    eval_type,
+    model_type,
+    model_label,
+    root="checkpoints"
+):
+    """
+    Create a checkpoint path for a given evaluation type and model.
+    """
+
+    clean_label = (
+        model_label
+        .replace("(", "")
+        .replace(")", "")
+        .replace(", ", "_")
+        .replace(",", "_")
+    )
+
+    model_path = os.path.join(root, eval_type, model_type)
+    os.makedirs(model_path, exist_ok=True)
+
+    return os.path.join(model_path, f"{clean_label}.pkl")
+
+# =========================================================
+# Checkpoint helper function
+# =========================================================
+def load_or_compute(checkpoint_path, compute_fn):
+    """
+    Load a checkpoint if it exists; otherwise compute, save, and return it.
+    """
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint: {checkpoint_path}")
+        return pd.read_pickle(checkpoint_path)
+
+    result = compute_fn()
+
+    if checkpoint_path:
+        result.to_pickle(checkpoint_path)
+
+    return result
+
+# example notebook usage of the checkpoint helpers
+
+# ckpt_path = make_checkpoint_path(
+#     eval_type="rolling_crps",
+#     model_type="sarima",
+#     model_label=model_label,
+# )
+
+# sarima_crps_raw = load_or_compute(
+#     ckpt_path,
+#     lambda: rolling_crps(...)
+# )
+
+# =========================================================
 # Metric helpers (standardized across models)
 # =========================================================
 

@@ -1009,6 +1009,7 @@ def rolling_crps(
     y,
     model_type,
     model_params,
+    label=None,
     distribution='normal',
     variance_type='static',  # 'static' or 'garch'
     variance_params=None,
@@ -1080,6 +1081,7 @@ def rolling_crps(
         term2 = np.dot(weights, samples_sorted)
         return term1 - term2
     
+    model_label = label or str(model_params)
     N_SAMPLES = 1000
     
     if np.isscalar(horizons):
@@ -1239,19 +1241,20 @@ def rolling_crps(
         for i, h in enumerate(horizons):
             z = (y_true[i] - mu_h[i]) / sigma_h[i]
             records.append({
-                'origin'        : y.index[t],
-                'origin_idx'    : t,
-                'horizon'       : h,
-                'mu'            : mu_h[i],
-                'sigma'         : sigma_h[i],
-                'sigma_native'  : sigma_native_h[i],
-                'z'             : z,
-                'y_true'        : y_true[i],
-                'innov_ratio'   : ratio[i],
-                'crps'          : crps_vals[i],
-                'pit'           : pit_vals[i],
-                'mean_model'    : model_type,
-                'variance_model': variance_type
+                'origin'            : y.index[t],
+                'origin_idx'        : t,
+                'model_params_lagel': model_label,
+                'horizon'           : h,
+                'mu'                : mu_h[i],
+                'sigma'             : sigma_h[i],
+                'sigma_native'      : sigma_native_h[i],
+                'z'                 : z,
+                'y_true'            : y_true[i],
+                'innov_ratio'       : ratio[i],
+                'crps'              : crps_vals[i],
+                'pit'               : pit_vals[i],
+                'mean_model'        : model_type,
+                'variance_model'    : variance_type
             })
 
     return pd.DataFrame(records)

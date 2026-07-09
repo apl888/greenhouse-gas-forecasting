@@ -924,6 +924,7 @@ def rolling_origin_evaluation(
                 records.append({
                     'origin'     : y.index[t],
                     'origin_idx' : t,
+                    'y_origin'   : float(y_train.iloc[-1]),
                     'horizon'    : h,
                     'model'      : model_type,
                     'y_true'     : y_true,

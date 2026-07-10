@@ -75,6 +75,7 @@ def make_checkpoint_path(
 ):
     """
     Create a checkpoint path for a given evaluation type and model.
+    Responsible only for organizing where results are stored.
     """
 
     clean_label = (
@@ -96,6 +97,7 @@ def make_checkpoint_path(
 def load_or_compute(checkpoint_path, compute_fn):
     """
     Load a checkpoint if it exists; otherwise compute, save, and return it.
+    Responsible only for caching/checkpointing.
     """
     if checkpoint_path and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint: {checkpoint_path}")
@@ -1243,7 +1245,7 @@ def rolling_crps(
             records.append({
                 'origin'            : y.index[t],
                 'origin_idx'        : t,
-                'model_params_lagel': model_label,
+                'model_params_label': model_label,
                 'horizon'           : h,
                 'mu'                : mu_h[i],
                 'sigma'             : sigma_h[i],

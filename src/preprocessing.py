@@ -292,16 +292,27 @@ class GasPreprocessor:
         if self.resample_freq:
             expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(self.resample_freq)
         else:
-            expected_start = self.data_end_date_
+            # When no resampling, expected start is one period after training end
+            # Infer the period from the training series frequency
+            train_freq = self.cleaned_series_.index.freq
+            if train_freq is not None:
+                expected_start = self.data_end_date_ + train_freq
+            else:
+                # Fallback: infer from the index spacing
+                inferred = pd.infer_freq(self.cleaned_series_.index)
+                if inferred:
+                    expected_start = self.data_end_date_ + pd.tseries.frequencies.to_offset(inferred)
+                else:
+                    expected_start = self.data_end_date_ + pd.Timedelta(weeks=1)
     
-        # If there is a gap, adjust the test set dates to be contiguous
+        # If there is a gap (more than one period), adjust the test set dates to be contiguous
         if new_resampled.index[0] > expected_start:
             print(f'Adjusting test set dates to be contiguous with train set')
             # Create new index starting where the train set ended
             new_index = pd.date_range(
                 start=expected_start,
                 periods=len(new_resampled),
-                freq=self.resample_freq or target_freq
+                freq=self.resample_freq or pd.infer_freq(self.cleaned_series_.index) or 'W-SUN'
             )
             new_resampled.index = new_index
 

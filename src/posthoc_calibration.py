@@ -276,3 +276,67 @@ def plot_aci_diagnostics(aci_df, horizons=(1,13,26,52)):
               f"{h_df['alpha_t'].mean():<12.4f} "
               f"{h_df['alpha_t'].std():<12.4f} "
               f"{h_df['z_aci'].mean():<10.4f}")
+        
+# ---------------------------------------------------------
+# calibration pipeline
+# ---------------------------------------------------------        
+
+def run_calibration_pipeline(
+    model_name,
+    crps_raw_df,
+    common_start_idx=492,
+    target_coverage=0.95,
+    gamma=0.02,
+    horizons=(1, 13, 26, 52)
+):
+    """
+    Full calibration pipeline: trim → variance scaling → ACI.
+    Returns scaled CRPS df, scale factors, ACI results, and final alpha_t.
+    """
+    # Trim to common window
+    crps_trim = crps_raw_df[crps_raw_df['origin_idx'] >= common_start_idx].copy()
+    
+    # Variance scaling
+    scale_factors = pc.compute_variance_scale_factors(crps_trim)
+    crps_scaled   = pc.apply_variance_scaling(crps_trim, scale_factors)
+    
+    # ACI
+    aci_result  = pc.adaptive_conformal_inference(
+        crps_scaled,
+        sigma_col='sigma_calibrated',
+        target_coverage=target_coverage,
+        gamma=gamma,
+        horizons=horizons
+    )
+    
+    # Final alpha_t per horizon
+    final_alpha = (
+        aci_result
+        .sort_values('origin')
+        .groupby('horizon')['alpha_t']
+        .last()
+    )
+    
+    # Summary
+    print(f"\n{'='*50}")
+    print(f"Calibration summary: {model_name}")
+    print(f"{'='*50}")
+    print(f"Scale factors:\n{scale_factors.round(4)}")
+    print(f"\nFinal alpha_t:\n{final_alpha.round(4)}")
+    coverage = aci_result.groupby('horizon')['covered_aci'].mean()
+    print(f"\nPost-ACI coverage:\n{coverage.round(4)}")
+    
+    return {
+        'crps_scaled' : crps_scaled,
+        'scale_factors': scale_factors,
+        'aci_result'  : aci_result,
+        'final_alpha' : final_alpha,
+    }
+
+# Run for all models
+calibration = {}
+for name, crps_df in [('SARIMA',  sarima_crps),
+                       ('SARIMAX', sarimax_crps),
+                       ('UCM',     ucm_crps),
+                       ('UCMX',    ucmx_crps)]:
+    calibration[name] = run_final_evaluation(name, crps_df)

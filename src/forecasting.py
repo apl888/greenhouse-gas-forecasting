@@ -49,7 +49,7 @@ def single_origin_forecast(
             X=exog_test
         )
     
-        mu = np.asarray(fc.predicted_mean).flatten()
+        mu = np.asarray(y_pred).flatten()
         
         # forecast variance
         pred_var = fitted_result.predict_var(
@@ -57,6 +57,7 @@ def single_origin_forecast(
             X=exog_test
         )
         
+        # AutoETS returns a DataFrame with one column
         var = np.asarray(pred_var).flatten()
     
         # numerical safety

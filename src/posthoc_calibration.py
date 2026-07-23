@@ -333,10 +333,10 @@ def run_calibration_pipeline(
         'final_alpha' : final_alpha,
     }
 
-# Run for all models
-calibration = {}
-for name, crps_df in [('SARIMA',  sarima_crps),
-                       ('SARIMAX', sarimax_crps),
-                       ('UCM',     ucm_crps),
-                       ('UCMX',    ucmx_crps)]:
-    calibration[name] = run_final_evaluation(name, crps_df)
+# example usage to run on multiple models
+# calibration = {}
+# for name, crps_df in [('SARIMA',  sarima_crps),
+#                        ('SARIMAX', sarimax_crps),
+#                        ('UCM',     ucm_crps),
+#                        ('UCMX',    ucmx_crps)]:
+#     calibration[name] = run_calibration_pipeline(name, crps_df)

@@ -22,29 +22,91 @@ def single_origin_forecast(
     variance scaling and ACI initialization from training.
     """
     n_test     = len(test_series)
-    fc         = fitted_result.get_forecast(steps=n_test, exog=exog_test)
-    mu         = fc.predicted_mean.values
-    sigma      = fc.se_mean.values
+    # fc         = fitted_result.get_forecast(steps=n_test, exog=exog_test)
+    # mu         = fc.predicted_mean.values
+    # sigma      = fc.se_mean.values
     alpha_tgt  = 1 - target_coverage
+    
+    # generate point forecasts and standard errors
+    
+    # statsmodels-style models
+    if hasattr(fitted_result, "get_forecast"):
+        fc = fitted_result.get_forecast(
+            steps=n_test,
+            exog=exog_test
+        )
+        
+        mu = np.asarray(fc.predicted_mean).flatten()
+        sigma = np.asarray(fc.se_mean).flatten()
+    
+    # sktime-style models, including AutoETS
+    elif hasattr(fitted_result, "predict"):
+        fh = np.arange(1, n_test + 1)
+        
+        # point forecasts
+        y_pred = fitted_result.predict(
+            fh=fh,
+            X=exog_test
+        )
+    
+        mu = np.asarray(fc.predicted_mean).flatten()
+        
+        # forecast variance
+        pred_var = fitted_result.predict_var(
+            fh=fh,
+            X=exog_test
+        )
+        
+        var = np.asarray(pred_var).flatten()
+    
+        # numerical safety
+        var = np.maximum(var, 0)
+        sigma = np.sqrt(var)
+    
+    else:
+        raise TypeError(
+            f"Unsupported forecasting object: "
+            f"{type(fitted_result).__name__}"
+        )
 
+    # apply variance scaling 
+    
     rows = []
+    
     for i in range(n_test):
         h         = i + 1
-        sf        = scale_factors.get(min(h, max(scale_factors.index)),
-                                       scale_factors.iloc[-1])
+        
+        sf        = scale_factors.get(
+            min(h, max(scale_factors.index)),
+            scale_factors.iloc[-1]
+            )
+        
         sigma_cal = sigma[i] * sf
-        alpha_t   = final_alpha.get(min(h, max(final_alpha.index)),
-                                     final_alpha.iloc[-1])
+        
+        alpha_t   = final_alpha.get(
+            min(h, max(final_alpha.index)),
+            final_alpha.iloc[-1]
+            )
+        
         z_t       = stats.norm.ppf(1 - alpha_t / 2)
+        
         lower     = mu[i] - z_t * sigma_cal
         upper     = mu[i] + z_t * sigma_cal
+        
         y_true    = test_series.iloc[i]
+        
         covered   = float(lower <= y_true <= upper)
 
         z_score = (y_true - mu[i]) / sigma_cal
+        
         phi     = stats.norm.pdf(z_score)
         Phi     = stats.norm.cdf(z_score)
-        crps    = sigma_cal * (z_score*(2*Phi-1) + 2*phi - 1/np.sqrt(np.pi))
+        
+        crps    = sigma_cal * (
+            z_score*(2*Phi-1) 
+            + 2*phi 
+            - 1/np.sqrt(np.pi)
+            )
 
         rows.append({
             'horizon'          : h,

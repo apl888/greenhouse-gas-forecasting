@@ -297,11 +297,11 @@ def run_calibration_pipeline(
     crps_trim = crps_raw_df[crps_raw_df['origin_idx'] >= common_start_idx].copy()
     
     # Variance scaling
-    scale_factors = pc.compute_variance_scale_factors(crps_trim)
-    crps_scaled   = pc.apply_variance_scaling(crps_trim, scale_factors)
+    scale_factors = compute_variance_scale_factors(crps_trim)
+    crps_scaled   = apply_variance_scaling(crps_trim, scale_factors)
     
     # ACI
-    aci_result  = pc.adaptive_conformal_inference(
+    aci_result  = adaptive_conformal_inference(
         crps_scaled,
         sigma_col='sigma_calibrated',
         target_coverage=target_coverage,

@@ -84,22 +84,22 @@ def single_origin_forecast(
         )
 
     # --- pre-compute horizon caps once outside the loop ----------
-    max_h_sf = scale_factors.index.max()
-    max_h_alpha = final_alpha.index.max()  
+    sf_horizons    = sorted(scale_factors.index.tolist())
+    alpha_horizons = sorted(final_alpha.index.tolist())
     
     # --- build per-horizon results ----------
     rows = []
     for i in range(n_test):
         h = i + 1
         
-        # variance scaling - cap to available horizons
-        h_sf_capped = min(h, max_h_sf)
-        sf = scale_factors.loc[h_sf_capped]
+        # Scale factor: use largest evaluation horizon <= h
+        h_sf      = max([x for x in sf_horizons if x <= h], default=sf_horizons[0])
+        sf        = scale_factors.loc[h_sf]
         sigma_cal = sigma[i] * sf
-        
-        # ACI alpha - cap to available horizons
-        h_alpha_capped = min(h, max_h_alpha)
-        alpha_t = final_alpha.loc[h_alpha_capped]
+
+        # ACI alpha: use largest evaluation horizon <= h
+        h_alpha = max([x for x in alpha_horizons if x <= h], default=alpha_horizons[0])
+        alpha_t = final_alpha.loc[h_alpha]
         z_t = stats.norm.ppf(1 - alpha_t / 2)
         
         lower = mu[i] - z_t * sigma_cal

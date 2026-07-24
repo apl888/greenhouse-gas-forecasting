@@ -20,14 +20,23 @@ def single_origin_forecast(
     """
     Generate single-origin forecast over full test period with
     variance scaling and ACI initialization from training.
+    
+    Parameters
+    ----------
+    fitted_result  : fitted statsmodels or sktime model result
+    test_series    : pd.Series — test observations with DatetimeIndex
+    exog_test      : pd.DataFrame or None — exogenous variables for test period
+    scale_factors  : pd.Series indexed by horizon — variance scaling factors
+    final_alpha    : pd.Series indexed by horizon — ACI alpha at end of training
+    target_coverage: float — nominal coverage level (default 0.95)
+
+    Returns
+    -------
+    pd.DataFrame with one row per test week
     """
     n_test     = len(test_series)
-    # fc         = fitted_result.get_forecast(steps=n_test, exog=exog_test)
-    # mu         = fc.predicted_mean.values
-    # sigma      = fc.se_mean.values
-    alpha_tgt  = 1 - target_coverage
     
-    # generate point forecasts and standard errors
+    # --- generate point forecasts and standard errors ----------
     
     # statsmodels-style models
     if hasattr(fitted_result, "get_forecast"):
@@ -35,7 +44,6 @@ def single_origin_forecast(
             steps=n_test,
             exog=exog_test
         )
-        
         mu = np.asarray(fc.predicted_mean).flatten()
         sigma = np.asarray(fc.se_mean).flatten()
     
@@ -43,22 +51,27 @@ def single_origin_forecast(
     elif hasattr(fitted_result, "predict"):
         fh = np.arange(1, n_test + 1)
         
-        # point forecasts
-        y_pred = fitted_result.predict(
-            fh=fh,
-            X=exog_test
-        )
+        # Only pass X if exog_test is not None
+        predict_kwargs = {'fh': fh}
+        if exog_test is not None:
+            predict_kwargs['X'] = exog_test
     
+        y_pred = fitted_result.predict(**predict_kwargs)
         mu = np.asarray(y_pred).flatten()
+    
+        var_kwargs = {'fh': fh}
+        if exog_test is not None:
+            var_kwargs['X'] = exog_test
+    
+        pred_var = fitted_result.predict_var(**var_kwargs)
         
-        # forecast variance
-        pred_var = fitted_result.predict_var(
-            fh=fh,
-            X=exog_test
-        )
-        
-        # AutoETS returns a DataFrame with one column
-        var = np.asarray(pred_var).flatten()
+        # predict_var is available in sktime's AutoETS but its output format can vary.
+        # It sometimes returns a DataFrame with a MultiIndex column rather than a simple array. 
+        # Add a defensive flatten:
+        if hasattr(pred_var, 'values'):
+            var = pred_var.values.flatten()
+        else:
+            var = np.asarray(pred_var).flatten()
     
         # numerical safety
         var = np.maximum(var, 0)
@@ -70,40 +83,36 @@ def single_origin_forecast(
             f"{type(fitted_result).__name__}"
         )
 
-    # apply variance scaling 
+    # --- pre-compute horizon caps once outside the loop ----------
+    max_h_sf = scale_factors.index.max()
+    max_h_alpha = final_alpha.index.max()  
     
+    # --- build per-horizon results ----------
     rows = []
-    
     for i in range(n_test):
-        h         = i + 1
+        h = i + 1
         
-        sf        = scale_factors.get(
-            min(h, max(scale_factors.index)),
-            scale_factors.iloc[-1]
-            )
-        
+        # variance scaling - cap to available horizons
+        h_sf_capped = min(h, max_h_sf)
+        sf = scale_factors.loc[h_sf_capped]
         sigma_cal = sigma[i] * sf
         
-        alpha_t   = final_alpha.get(
-            min(h, max(final_alpha.index)),
-            final_alpha.iloc[-1]
-            )
+        # ACI alpha - cap to available horizons
+        h_alpha_capped = min(h, max_h_alpha)
+        alpha_t = final_alpha.loc[h_alpha_capped]
+        z_t = stats.norm.ppf(1 - alpha_t / 2)
         
-        z_t       = stats.norm.ppf(1 - alpha_t / 2)
+        lower = mu[i] - z_t * sigma_cal
+        upper = mu[i] + z_t * sigma_cal
+        y_true = test_series.iloc[i]
         
-        lower     = mu[i] - z_t * sigma_cal
-        upper     = mu[i] + z_t * sigma_cal
-        
-        y_true    = test_series.iloc[i]
-        
-        covered   = float(lower <= y_true <= upper)
+        covered = float(lower <= y_true <= upper)
 
+        # analytical normal CRPS
         z_score = (y_true - mu[i]) / sigma_cal
-        
-        phi     = stats.norm.pdf(z_score)
-        Phi     = stats.norm.cdf(z_score)
-        
-        crps    = sigma_cal * (
+        phi = stats.norm.pdf(z_score)
+        Phi = stats.norm.cdf(z_score)
+        crps = sigma_cal * (
             z_score*(2*Phi-1) 
             + 2*phi 
             - 1/np.sqrt(np.pi)

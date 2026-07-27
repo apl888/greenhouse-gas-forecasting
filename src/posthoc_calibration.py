@@ -105,7 +105,8 @@ def adaptive_conformal_inference(
     sigma_col='sigma',
     target_coverage=0.95,
     gamma=0.05,           # learning rate — how fast to adapt
-    horizons=(1,13,26,52)
+    horizons=(1,13,26,52),
+    initial_alpha=None
 ):
     """
     Adaptive Conformal Inference (Gibbs & Candès 2021) applied to
@@ -171,8 +172,12 @@ def adaptive_conformal_inference(
     for h in horizons:
         h_df = df[df['horizon'] == h].copy().sort_values('origin')
         
-        # initialize alpha at target level
-        alpha_t = alpha_target
+        # use provided initial alpha or default to target 
+        if initial_alpha is not None and h in initial_alpha.index:
+            alpha_t = float(initial_alpha.loc[h])
+        else:
+            # initialize alpha at target level
+            alpha_t = alpha_target
         alpha_history = []
         
         for idx, row in h_df.iterrows():

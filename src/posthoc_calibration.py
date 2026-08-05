@@ -120,7 +120,7 @@ def adaptive_conformal_inference(
     ----------
     rolling_crps_df : pd.DataFrame
         Output from rolling_crps() containing columns:
-        mu, sigma (or sigma_calibrated), y_true, horizon, origin.
+        mu (or y_pred), sigma (or sigma_calibrated), y_true, horizon, origin.
     sigma_col : str, default 'sigma'
         Column to use as the base uncertainty estimate. Pass
         'sigma_calibrated' when applying ACI after variance scaling.

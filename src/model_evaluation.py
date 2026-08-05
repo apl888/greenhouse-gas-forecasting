@@ -1242,8 +1242,18 @@ def rolling_crps(
         # ---- store results ----
         for i, h in enumerate(horizons):
             z = (y_true[i] - mu_h[i]) / sigma_h[i]
+            
+            if h == 52 and t > len(y) - 55:
+                print()
+                print("t =", t)
+                print("origin =", y.index[t])
+                print("y_test first =", y_test.index[0])
+                print("y_test last  =", y_test.index[-1])
+                print("stored y_true =", y_true[i])
+                
             records.append({
                 'origin'            : y.index[t],
+                'target_date'       : y_test.index[h - 1],
                 'origin_idx'        : t,
                 'model_params_label': model_label,
                 'horizon'           : h,

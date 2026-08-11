@@ -290,13 +290,20 @@ def run_calibration_pipeline(
     model_name,
     crps_raw_df,
     common_start_idx=492,
-    target_coverage=0.95,
+    target_coverages=(0.50, 0.80, 0.95),
     gamma=0.02,
     horizons=(1, 13, 26, 52)
 ):
     """
     Full calibration pipeline: trim → variance scaling → ACI.
-    Returns scaled CRPS df, scale factors, ACI results, and final alpha_t.
+    Runs ACI separately for each target coverage level.
+    Returns scaled CRPS df, scale factors, and a dict of per-coverage
+    ACI results / final alpha_t, keyed by target_coverage.
+    
+    Variance scaling (scale_factors) is computed once and shared across all
+    coverage levels — only the ACI step is repeated per target_coverage,
+    since interval width depends on the coverage target but the underlying
+    sigma correction does not.
     """
     # Trim to common window
     crps_trim = crps_raw_df[crps_raw_df['origin_idx'] >= common_start_idx].copy()
@@ -305,37 +312,50 @@ def run_calibration_pipeline(
     scale_factors = compute_variance_scale_factors(crps_trim)
     crps_scaled   = apply_variance_scaling(crps_trim, scale_factors)
     
-    # ACI
-    aci_result  = adaptive_conformal_inference(
-        crps_scaled,
-        sigma_col='sigma_calibrated',
-        target_coverage=target_coverage,
-        gamma=gamma,
-        horizons=horizons
-    )
-    
-    # Final alpha_t per horizon
-    final_alpha = (
-        aci_result
-        .sort_values('origin')
-        .groupby('horizon')['alpha_t']
-        .last()
-    )
+    calibrations = {}
+    for tc in target_coverages:
+        
+        # ACI
+        aci_result  = adaptive_conformal_inference(
+            crps_scaled,
+            sigma_col='sigma_calibrated',
+            target_coverage=tc,
+            gamma=gamma,
+            horizons=horizons
+        )
+        
+        # Final alpha_t per horizon
+        final_alpha = (
+            aci_result
+            .sort_values('origin')
+            .groupby('horizon')['alpha_t']
+            .last()
+        )
+        
+        calibrations[tc] = {
+            'aci_result' : aci_result,
+            'final_alpha': final_alpha
+            }
     
     # Summary
     print(f"\n{'='*50}")
     print(f"Calibration summary: {model_name}")
     print(f"{'='*50}")
     print(f"Scale factors:\n{scale_factors.round(4)}")
-    print(f"\nFinal alpha_t:\n{final_alpha.round(4)}")
-    coverage = aci_result.groupby('horizon')['covered_aci'].mean()
-    print(f"\nPost-ACI coverage:\n{coverage.round(4)}")
+    
+    for tc in target_coverages:
+        aci_result = calibrations[tc]['aci_result']
+        final_alpha = calibrations[tc]['final_alpha']
+        coverage = aci_result.groupby('horizon')['covered_aci'].mean()
+    
+        print(f"\n--- Target Coverage: {tc:.0%} ---")
+        print(f"Final alpha_t:\n{final_alpha.round(4)}")
+        print(f"Post-ACI coverage:\n{coverage.round(4)}")
     
     return {
-        'crps_scaled' : crps_scaled,
+        'crps_scaled'  : crps_scaled,
         'scale_factors': scale_factors,
-        'aci_result'  : aci_result,
-        'final_alpha' : final_alpha,
+        'calibrations' : calibrations
     }
 
 # example usage to run on multiple models
@@ -345,3 +365,21 @@ def run_calibration_pipeline(
 #                        ('UCM',     ucm_crps),
 #                        ('UCMX',    ucmx_crps)]:
 #     calibration[name] = run_calibration_pipeline(name, crps_df)
+#
+# Accessing results for a specific model and coverage level:
+#     calibration['UCM']['scale_factors']                          # shared across coverages
+#     calibration['UCM']['calibrations'][0.95]['final_alpha']      # 95% target
+#     calibration['UCM']['calibrations'][0.80]['final_alpha']      # 80% target
+#     calibration['UCM']['calibrations'][0.50]['final_alpha']      # 50% target
+#     calibration['UCM']['calibrations'][0.95]['aci_result']       # full training ACI trace
+#
+# Downstream calls (e.g. single_origin_forecast) now require explicit
+# selection of a coverage level — there is no default "top-level" shortcut:
+#     fc.single_origin_forecast(
+#         fitted_result=fitted_models['UCM'],
+#         test_series=test_preprocessed,
+#         exog_test=None,
+#         scale_factors=calibration['UCM']['scale_factors'],
+#         final_alpha=calibration['UCM']['calibrations'][0.95]['final_alpha'],
+#         target_coverage=0.95,
+#     )

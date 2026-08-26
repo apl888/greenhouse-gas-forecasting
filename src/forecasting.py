@@ -3,6 +3,7 @@ from scipy import stats
 from scipy.stats import norm
 import pandas as pd
 import matplotlib.pyplot as plt
+from statsmodels.stats.diagnostic import acorr_ljungbox
 
 
 # ---------------------------------------------------------
@@ -162,3 +163,68 @@ def single_origin_forecast(
 #         target_coverage=0.95,
 #     )
 #     print(f"{name}: forecast complete")
+
+
+# ---------------------------------------------------------
+# sanity check for refitting model on full series
+# ---------------------------------------------------------
+
+def sanity_check_refit(result, full_series, model_name, prior_good_params=None):
+    print(f"\n{'='*50}\nSanity check: {model_name} refit on {full_series.index[0].date()} "
+          f"to {full_series.index[-1].date()}\n{'='*50}")
+
+    issues = []
+
+    # Convergence flag
+    if hasattr(result, 'mle_retvals'):
+        converged = result.mle_retvals.get('converged', True)
+        if not converged:
+            issues.append("Optimizer did not converge")
+
+    # standard errors implausibly large relative to coefficients
+    se, coef = result.bse, result.params
+    if (se > np.abs(coef) * 2).any():
+        bad = coef.index[se > np.abs(coef) * 2].tolist()
+        issues.append(f"Standard errors implausibly large for: {bad}, likely non-convergence")
+
+    # large jump from last known good fit, if provided
+    if prior_good_params is not None:
+        common = coef.index.intersection(prior_good_params.index)
+        pct_change = np.abs((coef[common] - prior_good_params[common]) / prior_good_params[common]) * 100
+        if (pct_change > 100).any():
+            bad = pct_change.index[pct_change > 100].tolist()
+            issues.append(f"Large jump (>100%) from prior fit for: {bad}, verify convergence")
+
+    # Residual autocorrelation — should still be white noise
+    lb = acorr_ljungbox(result.resid.dropna(), lags=[52], return_df=True)
+    if lb['lb_pvalue'].iloc[0] < 0.01:
+        issues.append(f"Ljung-Box p={lb['lb_pvalue'].iloc[0]:.4f}, residual structure detected")
+
+    # Boundary/frequency sanity — the exact bug you hit earlier!
+    gap = full_series.index.to_series().diff().dropna()
+    if not (gap == pd.Timedelta('7 days')).all():
+        issues.append("Non-weekly gap detected in series index")
+
+    # Plausible value range
+    if full_series.iloc[-1] < full_series.iloc[-53] * 0.9:
+        issues.append("Most recent value implausibly lower than 1 year ago")
+
+    if issues:
+        print("⚠ ISSUES FOUND:")
+        for i in issues:
+            print(f"  - {i}")
+    else:
+        print("✓ No issues detected — refit looks consistent with prior years")
+
+    return len(issues) == 0
+
+# example usage:
+
+# prior_good_params = fitted_models['UCM'].params
+
+# ucm_check_refit = sanity_check_refit(
+    # model_fits_full_series['UCM'], 
+    # full_series, 
+    # 'UCM',
+    # prior_good_params=prior_good_params
+    # )

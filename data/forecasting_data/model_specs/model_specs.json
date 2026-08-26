@@ -1,0 +1,29 @@
+{
+  "UCM": {
+    "level": "random walk with drift",
+    "freq_seasonal": [
+      {
+        "period": 52.18,
+        "harmonics": 4
+      }
+    ],
+    "stochastic_freq_seasonal": [
+      true
+    ],
+    "autoregressive": 1
+  },
+  "SARIMA": {
+    "order": [
+      1,
+      1,
+      1
+    ],
+    "seasonal_order": [
+      1,
+      0,
+      1,
+      52
+    ],
+    "trend": "c"
+  }
+}

@@ -797,7 +797,8 @@ def rolling_origin_evaluation(
     verbose=False
 ):
     '''
-    Rolling-origin evaluation using expanding window (point forecasts).
+    Rolling-origin evaluation using expanding window (point forecasts) with weekly forecast
+        origins and four evaluated forecast horizons (1, 13, 26, 52).
     Reports on mean forecast performance via RMSE and MAE
     Returns one record per (origin, horizon).
     
@@ -815,7 +816,7 @@ def rolling_origin_evaluation(
         Initial number of observations used for the first training window.
     horizons : tuple of int, default (1, 13, 26, 52)
         Specific forecast steps (lead times) to evaluate at each origin.
-    step : int, default 13
+    step : int, default 1
         The number of periods to advance the origin between folds.
     sp : int, default 52
         Seasonal period used for calculating Seasonal Naive benchmarks.
@@ -1058,7 +1059,7 @@ def rolling_crps(
         Size of the initial training window.
     horizons : tuple of int, default (1, 13, 26, 52)
         Forecast lead times to evaluate.
-    step : int, default 13
+    step : int, default 1
         Stride length between rolling origins.
     random_state : int, optional
         Seed for reproducibility.
@@ -1379,9 +1380,9 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     
     Parameters
     ----------
-    errors_a : array  forecast errors from model A (y_true - y_pred)
-    errors_b : array  forecast errors from model B
-    h        : int    forecast horizon (for HAC correction)
+    errors_a : array, forecast errors from model A (y_true - y_pred)
+    errors_b : array, forecast errors from model B
+    h        : int, forecast horizon (for HAC correction)
     alternative: 'two-sided', 'less' (A better than B), 'greater'
     
     Returns

@@ -97,7 +97,7 @@ def plot_pit_with_bands(pit_values, n_bins=10, ax=None, title=''):
     return ax
 
 # ---------------------------------------------------------
-# adaptive conformal inference
+# adaptive conformal inference (ACI)
 # ---------------------------------------------------------
 
 def adaptive_conformal_inference(

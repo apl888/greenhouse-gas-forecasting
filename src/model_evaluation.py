@@ -82,8 +82,13 @@ def make_checkpoint_path(
         model_label
         .replace("(", "")
         .replace(")", "")
+        .replace("[", "")
+        .replace("]", "")
+        .replace("=", "")
+        .replace("'", "")
         .replace(", ", "_")
         .replace(",", "_")
+        .replace(" ", "_")
     )
 
     model_path = os.path.join(root, eval_type, model_type)

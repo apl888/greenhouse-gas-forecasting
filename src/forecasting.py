@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
-from model_evaluation import residual_diagnostics 
+from .model_evaluation import residual_diagnostics 
 
 
 # ---------------------------------------------------------

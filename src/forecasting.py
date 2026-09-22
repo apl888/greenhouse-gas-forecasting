@@ -297,9 +297,16 @@ def fit_and_check_full_series(
 # final operational forecast following model fit on full series
 # ---------------------------------------------------------
 
-def operational_forecast(name, n_forecast=52, target_coverage=0.95):
-    result = model_fits_full[name]
-    cal = calibration_full[name]
+def operational_forecast(
+    name, 
+    model_fits_dict,
+    calibration_dict,
+    full_series,
+    n_forecast=52, 
+    target_coverage=0.95
+    ):
+    result = model_fits_dict[name]
+    cal = calibration_dict[name]
     final_alpha = cal['calibrations'][target_coverage]['final_alpha']
 
     alpha_h = np.array(sorted(final_alpha.index)); alpha_v = final_alpha.loc[alpha_h].values
@@ -317,12 +324,12 @@ def operational_forecast(name, n_forecast=52, target_coverage=0.95):
         sigma_cal = sigma.iloc[i] * sf
         z_t = stats.norm.ppf(1 - alpha_t / 2)
         rows.append({
-            'model': name, 
-            'horizon': h, 
-            'date': last_date + pd.Timedelta(weeks=h),
-            'y_pred': mu.iloc[i], 
+            'model'           : name, 
+            'horizon'         : h, 
+            'date'            : last_date + pd.Timedelta(weeks=h),
+            'y_pred'          : mu.iloc[i], 
             'sigma_calibrated': sigma_cal,
-            'lower': mu.iloc[i] - z_t*sigma_cal,
-            'upper': mu.iloc[i] + z_t*sigma_cal
+            'lower'           : mu.iloc[i] - z_t*sigma_cal,
+            'upper'           : mu.iloc[i] + z_t*sigma_cal
         })
     return pd.DataFrame(rows)

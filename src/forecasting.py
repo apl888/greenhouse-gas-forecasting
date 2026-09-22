@@ -5,6 +5,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
+from src.model_evaluation import residual_diagnostics 
+
 
 # ---------------------------------------------------------
 # single-origin forecasting

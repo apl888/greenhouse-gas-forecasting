@@ -181,13 +181,15 @@ class GasPreprocessor:
         self.outlier_mask_ = pd.Series(False, index=resampled_series.index)
         self.outlier_mask_.loc[outlier_dates] = True
 
-        # Smooth and interpolate the cleaned series
-        # Smoothing helps with small fluctuations, interpolation handles NaNs (both original and outlier-induced)
+        # Apply optional smoothing and interpolate internal missing values.
+        # With window=1 (the current setting), no smoothing is applied.
         smoothed = self._smooth_series(series_to_clean)
         
         # debug after smoothing
         print(f'After smoothing: {len(smoothed)} points, {smoothed.isna().sum()} NaNs')
         
+        # Linear interpolation is restricted to gaps bounded by valid observations;
+        # leading and trailing missing values are not extrapolated.
         interpolated = self._interpolate_series(smoothed)
         
         # debug after interpolation
@@ -306,15 +308,15 @@ class GasPreprocessor:
                     expected_start = self.data_end_date_ + pd.Timedelta(weeks=1)
     
         # If there is a gap (more than one period), adjust the test set dates to be contiguous
-        if new_resampled.index[0] > expected_start:
-            print(f'Adjusting test set dates to be contiguous with train set')
-            # Create new index starting where the train set ended
-            new_index = pd.date_range(
-                start=expected_start,
-                periods=len(new_resampled),
-                freq=self.resample_freq or pd.infer_freq(self.cleaned_series_.index) or 'W-SUN'
-            )
-            new_resampled.index = new_index
+        # if new_resampled.index[0] > expected_start:
+        #     print(f'Adjusting test set dates to be contiguous with train set')
+        #     # Create new index starting where the train set ended
+        #     new_index = pd.date_range(
+        #         start=expected_start,
+        #         periods=len(new_resampled),
+        #         freq=self.resample_freq or pd.infer_freq(self.cleaned_series_.index) or 'W-SUN'
+        #     )
+        #     new_resampled.index = new_index
 
         # Apply the smoothing and interpolation
         smoothed = self._smooth_series(new_resampled)

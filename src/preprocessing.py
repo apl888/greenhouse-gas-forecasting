@@ -1,6 +1,7 @@
 # src/preprocessing.py
 import numpy as np
 import pandas as pd
+import warnings
 import statsmodels.api as sm
 from statsmodels.tsa.seasonal import STL
 from statsmodels.tsa.stattools import adfuller, kpss
@@ -512,35 +513,89 @@ class GasPreprocessor:
         plt.tight_layout()
         plt.show()
 
-    def _run_stationarity_tests(self, series, label):
-        try:
-            adf_result = adfuller(series.dropna())
-        except ValueError as e:
-            print(f'Error in ADF test: {e}')
+    # def _run_stationarity_tests(self, series, label):
+    #     try:
+    #         adf_result = adfuller(series.dropna())
+    #     except ValueError as e:
+    #         print(f'Error in ADF test: {e}')
         
-        try:
-            kpss_result = kpss(series.dropna(), regression='c')
-        except ValueError as e:
-            print(f'Error in KPSS test: {e}')
+    #     try:
+    #         kpss_result = kpss(series.dropna(), regression='c')
+    #     except ValueError as e:
+    #         print(f'Error in KPSS test: {e}')
+
+    #     print(f'ADF and KPSS tests for {label}:')
+    #     print(f'ADF statistic {adf_result[0]:.4f}')
+    #     print(f'ADF p-value {adf_result[1]:.4f}')
+    #     # print(f'ADF critical values: {adf_result[4]}\n')
+    
+    #     print(f'KPSS statistic {kpss_result[0]:.4f}')
+    #     print(f'KPSS p-value {kpss_result[1]:.4f}')
+    #     # print(f'KPSS critical values: {kpss_result[3]}\n')
+    
+    #     if adf_result[1] < 0.05 and kpss_result[1] > 0.05:
+    #         print(f'the {label} time series is likely stationary according to ADF and KPSS tests.\n')
+    #     elif adf_result[1] > 0.05 and kpss_result[1] < 0.05:
+    #         print(f'the {label} time series is non-stationary according to ADF and KPSS tests.\n')
+    #     elif adf_result[1] > 0.05 and kpss_result[1] > 0.05:
+    #         print(f'the {label} time series may be trend-stationary according to ADF and KPSS tests.\n')
+    #     else: 
+    #         print(f'the {label} time series may be difference-stationary according to ADF and KPSS tests.\n')
+
+    def _interpret_stationarity(self, adf_p, kpss_p, regression, alpha=0.05):
+        """Interpret ADF (H0: unit root) and KPSS (H0: stationary) results."""
+        if np.isnan(adf_p) or np.isnan(kpss_p):
+            return 'test failed; no interpretation'
+
+        around = 'a constant' if regression == 'c' else 'a linear trend'
+        adf_rejects = adf_p < alpha      # evidence against a unit root
+        kpss_rejects = kpss_p < alpha    # evidence against stationarity
+
+        if adf_rejects and not kpss_rejects:
+            return f'stationary around {around}'
+        if not adf_rejects and kpss_rejects:
+            return (f'not stationary around {around}; consistent with a unit root '
+                    f'(stochastic trend), though structural breaks can produce this')
+        if not adf_rejects and not kpss_rejects:
+            return 'inconclusive: neither test rejects (low power or short sample)'
+        return ('conflicting: ADF rejects a unit root but KPSS rejects stationarity '
+                '(possible structural breaks, heteroscedasticity, or a '
+                'misspecified deterministic component)')
+    
+    def _run_stationarity_tests(self, series, label, alpha=0.05):
+        s = series.dropna()
+        rows = []
+        for reg, desc in [('c', 'constant'), ('ct', 'constant + trend')]:
+            try:
+                adf_stat, adf_p = adfuller(s, regression=reg, autolag='AIC')[:2]
+            except ValueError as e:
+                print(f'ADF ({desc}) failed: {e}')
+                adf_stat = adf_p = np.nan
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')  # InterpolationWarning at table limits
+                    kpss_stat, kpss_p = kpss(s, regression=reg, nlags='auto')[:2]
+            except ValueError as e:
+                print(f'KPSS ({desc}) failed: {e}')
+                kpss_stat = kpss_p = np.nan
+
+            rows.append({
+                'specification': desc,
+                'ADF stat': adf_stat, 'ADF p': adf_p,
+                'KPSS stat': kpss_stat, 'KPSS p': kpss_p,
+                'interpretation': self._interpret_stationarity(adf_p, kpss_p, reg, alpha),
+            })
+
+        results = pd.DataFrame(rows).set_index('specification')
 
         print(f'ADF and KPSS tests for {label}:')
-        print(f'ADF statistic {adf_result[0]:.4f}')
-        print(f'ADF p-value {adf_result[1]:.4f}')
-        # print(f'ADF critical values: {adf_result[4]}\n')
+        print(results[['ADF stat', 'ADF p', 'KPSS stat', 'KPSS p']].round(4))
+        print('Note: KPSS p-values are truncated to the range [0.01, 0.10].')
+        for spec, row in results.iterrows():
+            print(f'  [{spec}] {row["interpretation"]}')
+        print()
+        return results
     
-        print(f'KPSS statistic {kpss_result[0]:.4f}')
-        print(f'KPSS p-value {kpss_result[1]:.4f}')
-        # print(f'KPSS critical values: {kpss_result[3]}\n')
-    
-        if adf_result[1] < 0.05 and kpss_result[1] > 0.05:
-            print(f'the {label} time series is likely stationary according to ADF and KPSS tests.\n')
-        elif adf_result[1] > 0.05 and kpss_result[1] < 0.05:
-            print(f'the {label} time series is non-stationary according to ADF and KPSS tests.\n')
-        elif adf_result[1] > 0.05 and kpss_result[1] > 0.05:
-            print(f'the {label} time series may be trend-stationary according to ADF and KPSS tests.\n')
-        else: 
-            print(f'the {label} time series may be difference-stationary according to ADF and KPSS tests.\n')
-
     def _plot_decomposition(self, stl_result):
         # check if residuals have enough data
         residuals_clean = stl_result.resid.dropna()

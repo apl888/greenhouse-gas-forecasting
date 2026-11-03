@@ -101,18 +101,55 @@ def make_checkpoint_path(
 # =========================================================
 def load_or_compute(checkpoint_path, compute_fn):
     """
-    Load a checkpoint if it exists; otherwise compute, save, and return it.
-    Responsible only for caching/checkpointing.
-    """
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        print(f"Loading checkpoint: {checkpoint_path}")
-        return pd.read_pickle(checkpoint_path)
+    Load a cached result if available; otherwise compute, save, and return it.
 
+    Parameters
+    ----------
+    checkpoint_path : str or Path or None
+        Path to the pickle checkpoint. If None, compute without caching.
+    compute_fn : callable
+        Zero-argument function that performs the computation.
+
+    Returns
+    -------
+    object
+        The cached or newly computed result.
+    """
+    if checkpoint_path is None:
+        return compute_fn()
+
+    checkpoint_path = os.fspath(checkpoint_path)
+
+    # Load an existing checkpoint.
+    if os.path.exists(checkpoint_path):
+        try:
+            print(f"Loading checkpoint: {checkpoint_path}")
+            return pd.read_pickle(checkpoint_path)
+
+        except (OSError, EOFError, ValueError, pickle.UnpicklingError) as e:
+            print(
+                f"Could not load checkpoint ({e}). "
+                "Recomputing result."
+            )
+
+    # Compute the result if no usable checkpoint exists.
     result = compute_fn()
 
-    if checkpoint_path:
-        result.to_pickle(checkpoint_path)
+    # Ensure the destination directory exists.
+    os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)),
+                exist_ok=True)
 
+    # Write to a temporary file before replacing the checkpoint.
+    temp_path = checkpoint_path + ".tmp"
+
+    try:
+        pd.to_pickle(result, temp_path)
+        os.replace(temp_path, checkpoint_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    print(f"Saved checkpoint: {checkpoint_path}")
     return result
 
 # example notebook usage of the checkpoint helpers
@@ -799,7 +836,8 @@ def rolling_origin_evaluation(
     checkpoint_path=None,
     start_params=None,
     random_state=None,
-    verbose=False
+    verbose=False,
+    desc='Rolling-origin folds'
 ):
     '''
     Rolling-origin evaluation using expanding window (point forecasts) with weekly forecast
@@ -868,7 +906,7 @@ def rolling_origin_evaluation(
     # initialize the rolling_origins() generator 
     gen = rolling_origins(y, exog, start_train_size, H_MAX, step)
     
-    pbar = tqdm(gen, total=n_folds_total, desc='Rolling-origin folds', unit='fold')
+    pbar = tqdm(gen, total=n_folds_total, desc=desc, unit='fold')
     
     completed_count = len(completed_origins)
 

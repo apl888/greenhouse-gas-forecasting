@@ -470,6 +470,16 @@ def fit_mean_model(y,
         ets_params = {**model_params, 'auto':False}
         model        = AutoETS(**ets_params)
         results      = model.fit(y)
+        
+        # Extract underlying statsmodels results
+        fitted_results = results._fitted_forecaster
+        mle_info = getattr(fitted_results, 'mle_retvals', {})
+
+        convergence_info = {
+            'converged': mle_info.get('converged', None),
+            'iterations': mle_info.get('iterations', mle_info.get('nit', None)),
+            'message': mle_info.get('message', None)
+            }
 
         # in-sample fitted values
         fh          = ForecastingHorizon(y.index, is_relative=False)
@@ -487,11 +497,12 @@ def fit_mean_model(y,
         raise ValueError(f'Unsupported model_type: {model_type}')
 
     return {
-        'model_type'   : model_type,
-        'results'      : results,
-        'residuals'    : resid,
-        'fitted_values': fitted_vals,
-        'start_params' : start_params
+        'model_type'      : model_type,
+        'results'         : results,
+        'residuals'       : resid,
+        'fitted_values'   : fitted_vals,
+        'start_params'    : start_params,
+        'convergence_info': convergence_info
     }
 
 # =========================================================
@@ -888,14 +899,18 @@ def rolling_origin_evaluation(
     start_time = time.time()
     
     records = []
+    fit_diagnostics = []
+    
     H_MAX = max(horizons)
     
     completed_origins = set()  
+    
     if checkpoint_path and os.path.exists(checkpoint_path):
         with open(checkpoint_path, 'rb') as f:
             ckpt = pickle.load(f)
             records = ckpt['records']
             completed_origins = ckpt['completed_origins']
+            fit_diagnostics = ckpt.get('fit_diagnostics', [])
             
         if verbose:
             print(f'Loaded checkpoint with {len(completed_origins)} completed folds')
@@ -926,6 +941,19 @@ def rolling_origin_evaluation(
             )
 
             start_params = fitted.get('start_params')
+            
+            # collect convergence info after each ETS fit 
+            if model_type == 'ets':
+                diag = fitted.get('convergence_info', {})
+
+                fit_diagnostics.append({
+                    'origin': y.index[t],
+                    'origin_idx': t,
+                    'train_size': len(y_train),
+                    'converged': diag.get('converged'),
+                    'iterations': diag.get('iterations'),
+                    'message': diag.get('message')
+                })
             
             fc = forecast_mean_model(
                 fitted,
@@ -991,7 +1019,8 @@ def rolling_origin_evaluation(
                     pickle.dump(
                         {
                             'completed_origins': completed_origins,
-                            'records'          : records
+                            'records'          : records,
+                            'fit_diagnostics'  : fit_diagnostics
                         },
                         f
                     )

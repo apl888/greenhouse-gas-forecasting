@@ -349,6 +349,8 @@ def fit_mean_model(y,
 
     if verbose:
         logger.info(f'Fitting {model_type.upper()} model')
+        
+    convergence_info = None
 
     if model_type == 'sarima':
         if 'trend' not in model_params:
@@ -432,6 +434,8 @@ def fit_mean_model(y,
 
         model = UnobservedComponents(**ucm_kwargs)
 
+        fit_method = model_params.get('method', 'lbfgs')
+
         try:
             results = model.fit(
                 start_params=start_params,
@@ -444,12 +448,45 @@ def fit_mean_model(y,
             # alert the user that the method is switching to 'Powell'
             print(f"Warning: Primary fit failed at a rolling window, Switching to 'powell' method. Error: {e}")
             
+            fit_method = 'powell'
+            
             results = model.fit(
                 start_params = start_params,
                 disp         = False,
-                method       = 'powell',
+                method       = fit_method,
                 maxiter      = model_params.get('maxiter', 300)
             )
+
+        # Extract optimizer convergence information
+        mle_retvals = getattr(results, 'mle_retvals', None)
+
+        if isinstance(mle_retvals, dict):
+            warnflag = mle_retvals.get('warnflag')
+            converged = mle_retvals.get('converged')
+
+            # Use warnflag if an explicit convergence status is unavailable
+            if converged is None and warnflag is not None:
+                converged = (warnflag == 0)
+
+            convergence_info = {
+                'converged': converged,
+                'iterations': mle_retvals.get(
+                    'iterations', mle_retvals.get('nit')
+                ),
+                'warnflag': warnflag,
+                'message': mle_retvals.get(
+                    'message', mle_retvals.get('task')
+                ),
+                'method': fit_method
+            }
+        else:
+            convergence_info = {
+                'converged': None,
+                'iterations': None,
+                'warnflag': None,
+                'message': None,
+                'method': fit_method
+            }
 
         # add burnin trim:
         resid = pd.Series(results.resid, index=y.index).dropna()
@@ -473,7 +510,7 @@ def fit_mean_model(y,
         
         # Extract underlying statsmodels results
         fitted_results = results._fitted_forecaster
-        mle_info = getattr(fitted_results, 'mle_retvals', {})
+        mle_info = getattr(fitted_results, 'mle_retvals', {}) or {}
 
         convergence_info = {
             'converged': mle_info.get('converged', None),
@@ -943,16 +980,19 @@ def rolling_origin_evaluation(
             start_params = fitted.get('start_params')
             
             # collect convergence info after each ETS fit 
-            if model_type == 'ets':
+            if model_type in ('ets', 'ucm'):
                 diag = fitted.get('convergence_info', {})
 
                 fit_diagnostics.append({
+                    'model_type': model_type,
                     'origin': y.index[t],
                     'origin_idx': t,
                     'train_size': len(y_train),
                     'converged': diag.get('converged'),
                     'iterations': diag.get('iterations'),
-                    'message': diag.get('message')
+                    'warnflag': diag.get('warnflag'),
+                    'message': diag.get('message'),
+                    'method': diag.get('method')
                 })
             
             fc = forecast_mean_model(
@@ -1042,7 +1082,10 @@ def rolling_origin_evaluation(
                 # logger.exception(f"Fold failed at t={t}")   # alternative approach to debugging
             continue
 
-    return pd.DataFrame(records)
+    eval_df = pd.DataFrame(records)
+    eval_df.attrs['fit_diagnostics'] = pd.DataFrame(fit_diagnostics)
+
+    return eval_df
 
 # Example notebook usage:
 #

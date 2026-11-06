@@ -985,14 +985,14 @@ def rolling_origin_evaluation(
 
                 fit_diagnostics.append({
                     'model_type': model_type,
-                    'origin': y.index[t],
+                    'origin'    : y.index[t],
                     'origin_idx': t,
                     'train_size': len(y_train),
-                    'converged': diag.get('converged'),
+                    'converged' : diag.get('converged'),
                     'iterations': diag.get('iterations'),
-                    'warnflag': diag.get('warnflag'),
-                    'message': diag.get('message'),
-                    'method': diag.get('method')
+                    'warnflag'  : diag.get('warnflag'),
+                    'message'   : diag.get('message'),
+                    'method'    : diag.get('method')
                 })
             
             fc = forecast_mean_model(
@@ -1528,7 +1528,7 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     # Adaptive bandwidth selection:
     # Cap HAC lags: Use h-1 lags when sample is large enough to support them
     # When n is small relative to h, h-1 lags produces negative HAC variance.
-    # The n^(1/3) rule (Andrews 1991) is a standard data-driven alternative.
+    # The n^(1/3) rule is a standard data-driven alternative.
     # Taking the min ensures we never request more lags than the data can support.
     min_obs_per_lag = 10
     min_n_for_full_lags = min_obs_per_lag * h # rule of thumb: at least 10 obs per lag
@@ -1588,7 +1588,7 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
         hac_var_corrected = hac_var
         correction_applied = False
     else:
-        hac_var_corrected = correction * hac_var
+        hac_var_corrected = hac_var / correction
         correction_applied = True
     
     dm_stat = d_mean / np.sqrt(hac_var_corrected / n)
@@ -1597,9 +1597,9 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
     if alternative == 'two-sided':
         p_value = 2 * stats.t.sf(abs(dm_stat), df=n-1)
     elif alternative == 'less':
-        p_value = stats.t.sf(dm_stat, df=n-1)
-    elif alternative == 'greater':
         p_value = stats.t.cdf(dm_stat, df=n-1)
+    elif alternative == 'greater':
+        p_value = stats.t.sf(dm_stat, df=n-1)
     else:
         raise ValueError("alternative must be 'two-sided', 'less', or 'greater")
     

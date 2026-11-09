@@ -1475,7 +1475,12 @@ def garch_adjusted_coverage(
 # 12. Diebold–Mariano test
 # =========================================================
 
-def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
+def diebold_mariano_test(
+    errors_a, 
+    errors_b, 
+    h=1, 
+    alternative='two-sided',
+    max_lags=None):
     """
     Test for equal predictive accuracy.
 
@@ -1525,17 +1530,31 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
             "note": "too few paired forecasts for DM test."
         }
 
-    # Adaptive bandwidth selection:
+    # Adaptive bandwidth selection (unless manually overridden):
     # Cap HAC lags: Use h-1 lags when sample is large enough to support them
     # When n is small relative to h, h-1 lags produces negative HAC variance.
     # The n^(1/3) rule is a standard data-driven alternative.
     # Taking the min ensures we never request more lags than the data can support.
-    min_obs_per_lag = 10
-    min_n_for_full_lags = min_obs_per_lag * h # rule of thumb: at least 10 obs per lag
-    if n >= min_n_for_full_lags:
-        max_lags = max(0, h - 1)
-    else:    
-        max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
+    if max_lags is None:
+        min_obs_per_lag = 10
+        min_n_for_full_lags = min_obs_per_lag * h  # rule of thumb: at least 10 obs per lag
+
+        if n >= min_n_for_full_lags:
+            max_lags = max(0, h - 1)
+        else:
+            max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
+    else:
+        if not isinstance(max_lags, (int, np.integer)) or max_lags < 0:
+            raise ValueError("max_lags must be a non-negative integer or None")
+
+        max_lags = min(max_lags, n - 1)
+    
+    # min_obs_per_lag = 10
+    # min_n_for_full_lags = min_obs_per_lag * h # rule of thumb: at least 10 obs per lag
+    # if n >= min_n_for_full_lags:
+    #     max_lags = max(0, h - 1)
+    # else:    
+    #     max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
         
     if np.allclose(d, 0):
         return {
@@ -1588,7 +1607,7 @@ def diebold_mariano_test(errors_a, errors_b, h=1, alternative='two-sided'):
         hac_var_corrected = hac_var
         correction_applied = False
     else:
-        hac_var_corrected = hac_var / correction
+        hac_var_corrected = hac_var / correction  # Harvey–Leybourne–Newbold correction
         correction_applied = True
     
     dm_stat = d_mean / np.sqrt(hac_var_corrected / n)

@@ -549,7 +549,8 @@ def fit_mean_model(y,
 def forecast_mean_model(
     fitted, 
     horizon, 
-    exog=None
+    exog=None,
+    verbose=False
     ):
     '''
     Generate forecasts and predictive uncertainty.
@@ -1233,7 +1234,10 @@ def rolling_crps(
             exog=exog_train,
             start_params=start_params
         )
+        
         start_params = fitted.get('start_params')
+        
+        convergence_info = fitted.get('convergence_info') or {}
         
         if verbose:
             print(f"Fold t={t}, len(y_train)={len(y_train)}, index freq={y_train.index.freq}")
@@ -1246,7 +1250,7 @@ def rolling_crps(
             exog=exog_test
         )
         # ---- Align forecast values with requested horizons (robust index alignment) ----
-        mu = fc['mean'].reindex(range(1, H_MAX + 1))          # ensure index 1..H_MAX
+        mu = fc['mean'].reindex(range(1, H_MAX + 1))  # ensure index 1..H_MAX
         sigma_native = fc['sigma'].reindex(range(1, H_MAX + 1))
         
         # ---- residuals and variance ----
@@ -1382,7 +1386,12 @@ def rolling_crps(
                 'crps'              : crps_vals[i],
                 'pit'               : pit_vals[i],
                 'mean_model'        : model_type,
-                'variance_model'    : variance_type
+                'variance_model'    : variance_type,
+                'converged'         : convergence_info.get('converged'),
+                'iterations'        : convergence_info.get('iterations'),
+                'warnflag'          : convergence_info.get('warnflag'),
+                'fit_message'       : convergence_info.get('message'),
+                'fit_method'        : convergence_info.get('method'),
             })
 
     return pd.DataFrame(records)
@@ -1480,7 +1489,8 @@ def diebold_mariano_test(
     errors_b, 
     h=1, 
     alternative='two-sided',
-    max_lags=None):
+    max_lags=None
+    ):
     """
     Test for equal predictive accuracy.
 
@@ -1548,13 +1558,6 @@ def diebold_mariano_test(
             raise ValueError("max_lags must be a non-negative integer or None")
 
         max_lags = min(max_lags, n - 1)
-    
-    # min_obs_per_lag = 10
-    # min_n_for_full_lags = min_obs_per_lag * h # rule of thumb: at least 10 obs per lag
-    # if n >= min_n_for_full_lags:
-    #     max_lags = max(0, h - 1)
-    # else:    
-    #     max_lags = max(0, min(h - 1, int(np.floor(n ** (1/3)))))
         
     if np.allclose(d, 0):
         return {

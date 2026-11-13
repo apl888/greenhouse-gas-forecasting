@@ -1372,7 +1372,7 @@ def rolling_crps(
             #     print("stored y_true =", y_true[i])
                 
             records.append({
-                'origin'            : y.index[t],
+                'origin'            : y_train.index[-1],
                 'target_date'       : y_test.index[h - 1],
                 'origin_idx'        : t,
                 'model_params_label': model_label,

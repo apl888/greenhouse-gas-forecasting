@@ -108,6 +108,52 @@ def adaptive_conformal_inference(
     horizons=(1,13,26,52),
     initial_alpha=None
 ):
+        """
+    Apply delayed-feedback ACI-style adaptation to Gaussian
+    rolling-origin prediction intervals.
+
+    Alpha is updated only when the corresponding forecast outcome
+    becomes observable (target_date <= current origin).
+
+    Each forecast horizon maintains an independent alpha sequence.
+
+    Parameters
+    ----------
+    rolling_crps_df : pd.DataFrame
+        Output from rolling_crps() containing:
+        origin, target_date, mu, y_true, horizon, and sigma_col.
+
+    sigma_col : str, default 'sigma'
+        Predictive standard deviation column.
+
+    target_coverage : float, default 0.95
+        Desired nominal interval coverage.
+
+    gamma : float, default 0.05
+        Adaptation rate.
+
+    horizons : tuple of int
+        Forecast horizons to evaluate independently.
+
+    initial_alpha : dict or pd.Series, optional
+        Initial alpha for each horizon. Defaults to 1-target_coverage.
+
+    Returns
+    -------
+    pd.DataFrame
+        Input dataframe with additional columns:
+        alpha_t, z_aci, lower_aci, upper_aci,
+        covered_aci, missed_aci.
+
+    Notes
+    -----
+    This implements delayed-feedback ACI-style adaptation of
+    Gaussian prediction intervals.
+
+    It does not establish distribution-free or conditional
+    coverage guarantees for these multi-horizon forecasts.
+    """
+# original markdown docstring
     """
     Adaptive Conformal Inference (Gibbs & Candès 2021) applied to
     rolling-origin probabilistic forecasts.  
@@ -164,63 +210,182 @@ def adaptive_conformal_inference(
     correspond to a fixed predictive distribution. Use covered_aci and
     rolling coverage plots for calibration assessment instead.
     """
-    df = rolling_crps_df.copy().sort_values(['horizon', 'origin'])
-    alpha_target = 1 - target_coverage   # e.g. 0.05
-    
+    # Validate inputs
+    if not 0 < target_coverage < 1:
+        raise ValueError("target_coverage must be between 0 and 1.")
+
+    if gamma <= 0:
+        raise ValueError("gamma must be positive.")
+
+    required_cols = {
+        'origin', 'target_date', 'mu', 'y_true',
+        'horizon', sigma_col
+    }
+
+    missing_cols = required_cols.difference(rolling_crps_df.columns)
+
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+
+    df = rolling_crps_df.copy()
+
+    df['origin'] = pd.to_datetime(df['origin'])
+    df['target_date'] = pd.to_datetime(df['target_date'])
+
+    alpha_target = 1 - target_coverage
+
     results = []
-    
+
     for h in horizons:
-        h_df = df[df['horizon'] == h].copy().sort_values('origin')
-        
-        # use provided initial alpha or default to target 
-        if initial_alpha is not None and h in initial_alpha.index:
-            alpha_t = float(initial_alpha.loc[h])
+
+        h_df = (
+            df[df['horizon'] == h]
+            .copy()
+            .sort_values(['origin', 'target_date'])
+        )
+
+        if h_df.empty:
+            continue
+
+        # Initialize alpha for this horizon
+        if initial_alpha is not None:
+            alpha_t = float(initial_alpha.get(h, alpha_target))
         else:
-            # initialize alpha at target level
             alpha_t = alpha_target
+
+        # Stores forecast errors that have not yet matured
+        pending = []
+
         alpha_history = []
-        
-        for idx, row in h_df.iterrows():
-            # record current alpha before updating
+        z_history = []
+        lower_history = []
+        upper_history = []
+        missed_history = []
+
+        for _, row in h_df.iterrows():
+
+            current_origin = row['origin']
+
+            # process outcomes that are now observable
+            matured = sorted(
+                [
+                    (target_date, missed)
+                    for target_date, missed in pending
+                    if target_date <= current_origin
+                ],
+                key=lambda x: x[0]
+            )
+
+            # Remove matured forecasts from the pending queue
+            pending = [
+                (target_date, missed)
+                for target_date, missed in pending
+                if target_date > current_origin
+            ]
+
+            # Update alpha using only matured outcomes
+            for target_date, missed in matured:
+
+                alpha_t += gamma * (alpha_target - missed)
+
+                alpha_t = np.clip(alpha_t, 0.001, 0.999)
+
+            # issue the current forecast interval
+            z_t = stats.norm.ppf(1 - alpha_t / 2)
+
+            sigma = row[sigma_col]
+
+            lower = row['mu'] - z_t * sigma
+            upper = row['mu'] + z_t * sigma
+
+            missed = float(
+                row['y_true'] < lower or row['y_true'] > upper
+            )
+
+            # queue this outcome until its target date
+            pending.append((row['target_date'], missed))
+
+            # Save interval information
             alpha_history.append(alpha_t)
-            
-            # conformal score: was the last interval correct?
-            # 1 if y_true outside interval (miscoverage), 0 if inside
-            z_t    = stats.norm.ppf(1 - alpha_t / 2)
-            sigma  = row[sigma_col]
-            lower  = row['mu'] - z_t * sigma
-            upper  = row['mu'] + z_t * sigma
-            
-            missed = float(row['y_true'] < lower or row['y_true'] > upper)
-            
-            # ACI update rule (Gibbs & Candès 2021, eq. 1):
-            # α_{t+1} = α_t + γ · (α_target - 1{missed})
-            # missed=1 → α decreases → wider intervals next time
-            # missed=0 → α increases → can narrow slightly
-            alpha_t = alpha_t + gamma * (alpha_target - missed)
-            alpha_t = np.clip(alpha_t, 0.001, 0.999)   # numerical safety
-        
-        h_df['alpha_t']     = alpha_history
-        h_df['z_aci']       = stats.norm.ppf(1 - np.array(alpha_history) / 2)
-        sigma_vals          = h_df[sigma_col].values
-        h_df['lower_aci']   = h_df['mu'] - h_df['z_aci'] * sigma_vals
-        h_df['upper_aci']   = h_df['mu'] + h_df['z_aci'] * sigma_vals
-        h_df['covered_aci'] = (
-            (h_df['y_true'] >= h_df['lower_aci']) & 
-            (h_df['y_true'] <= h_df['upper_aci'])
-        ).astype(float)
-        
-        # recalibrated PIT using adapted alpha
-        # effective_sigma = h_df['z_aci'].values / 1.96 * sigma_vals
-        # h_df['pit_aci'] = stats.norm.cdf(
-        #     h_df['y_true'].values,
-        #     loc=h_df['mu'].values,
-        #     scale=effective_sigma
-        # )
-        
+            z_history.append(z_t)
+            lower_history.append(lower)
+            upper_history.append(upper)
+            missed_history.append(missed)
+
+        # Add results for this horizon
+        h_df['alpha_t'] = alpha_history
+        h_df['z_aci'] = z_history
+        h_df['lower_aci'] = lower_history
+        h_df['upper_aci'] = upper_history
+        h_df['missed_aci'] = missed_history
+
+        h_df['covered_aci'] = 1.0 - h_df['missed_aci']
+
         results.append(h_df)
+
+    return (
+        pd.concat(results)
+        .sort_values(['origin', 'horizon'])
+        .reset_index(drop=True)
+    )
+    # df = rolling_crps_df.copy().sort_values(['horizon', 'origin'])
+    # alpha_target = 1 - target_coverage   # e.g. 0.05
     
-    return pd.concat(results).sort_values(['origin', 'horizon']) 
+    # results = []
+    
+    # for h in horizons:
+    #     h_df = df[df['horizon'] == h].copy().sort_values('origin')
+        
+    #     # use provided initial alpha or default to target 
+    #     if initial_alpha is not None and h in initial_alpha.index:
+    #         alpha_t = float(initial_alpha.loc[h])
+    #     else:
+    #         # initialize alpha at target level
+    #         alpha_t = alpha_target
+            
+    #     alpha_history = []
+        
+    #     for idx, row in h_df.iterrows():
+    #         # record current alpha before updating
+    #         alpha_history.append(alpha_t)
+            
+    #         # conformal score: was the last interval correct?
+    #         # 1 if y_true outside interval (miscoverage), 0 if inside
+    #         z_t    = stats.norm.ppf(1 - alpha_t / 2)
+    #         sigma  = row[sigma_col]
+    #         lower  = row['mu'] - z_t * sigma
+    #         upper  = row['mu'] + z_t * sigma
+            
+    #         missed = float(row['y_true'] < lower or row['y_true'] > upper)
+            
+    #         # ACI update rule (Gibbs & Candès 2021, eq. 1):
+    #         # α_{t+1} = α_t + γ · (α_target - 1{missed})
+    #         # missed=1 → α decreases → wider intervals next time
+    #         # missed=0 → α increases → can narrow slightly
+    #         alpha_t = alpha_t + gamma * (alpha_target - missed)
+    #         alpha_t = np.clip(alpha_t, 0.001, 0.999)   # numerical safety
+        
+    #     h_df['alpha_t']     = alpha_history
+    #     h_df['z_aci']       = stats.norm.ppf(1 - np.array(alpha_history) / 2)
+    #     sigma_vals          = h_df[sigma_col].values
+    #     h_df['lower_aci']   = h_df['mu'] - h_df['z_aci'] * sigma_vals
+    #     h_df['upper_aci']   = h_df['mu'] + h_df['z_aci'] * sigma_vals
+    #     h_df['covered_aci'] = (
+    #         (h_df['y_true'] >= h_df['lower_aci']) & 
+    #         (h_df['y_true'] <= h_df['upper_aci'])
+    #     ).astype(float)
+        
+    #     # recalibrated PIT using adapted alpha
+    #     # effective_sigma = h_df['z_aci'].values / 1.96 * sigma_vals
+    #     # h_df['pit_aci'] = stats.norm.cdf(
+    #     #     h_df['y_true'].values,
+    #     #     loc=h_df['mu'].values,
+    #     #     scale=effective_sigma
+    #     # )
+        
+    #     results.append(h_df)
+    
+    # return pd.concat(results).sort_values(['origin', 'horizon']) 
 
 # ---------------------------------------------------------
 # adaptive conformal inference diagnostics plot

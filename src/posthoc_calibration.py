@@ -108,108 +108,88 @@ def adaptive_conformal_inference(
     horizons=(1,13,26,52),
     initial_alpha=None
 ):
-        """
-    Apply delayed-feedback ACI-style adaptation to Gaussian
-    rolling-origin prediction intervals.
+    """
+    Delayed-feedback Adaptive Conformal Inference (ACI-style)
+    for rolling-origin Gaussian prediction intervals.
 
-    Alpha is updated only when the corresponding forecast outcome
-    becomes observable (target_date <= current origin).
+    Based on the adaptive miscoverage-level update introduced by
+    Gibbs and Candès (2021).
 
-    Each forecast horizon maintains an independent alpha sequence.
+    Adjusts the interval significance level alpha separately for
+    each forecast horizon based on observed forecast miscoverage.
+    Unlike an immediate-update implementation, this version
+    updates alpha only when the corresponding forecast outcome
+    becomes observable.
+
+    The method is applied to Gaussian predictive intervals using
+    the model's forecast mean and predictive standard deviation.
 
     Parameters
     ----------
     rolling_crps_df : pd.DataFrame
         Output from rolling_crps() containing:
-        origin, target_date, mu, y_true, horizon, and sigma_col.
+        origin, target_date, mu, sigma, y_true, and horizon.
 
     sigma_col : str, default 'sigma'
-        Predictive standard deviation column.
+        Predictive standard deviation column to use.
 
     target_coverage : float, default 0.95
-        Desired nominal interval coverage.
+        Desired nominal interval coverage (e.g. 0.95 for 95%).
 
     gamma : float, default 0.05
-        Adaptation rate.
+        Adaptation rate controlling the speed of adjustment.
+        Larger values respond more quickly to observed
+        miscoverage but can produce more variable interval widths.
+        Smaller values produce smoother, slower adjustments.
 
-    horizons : tuple of int
-        Forecast horizons to evaluate independently.
+    horizons : tuple of int, default (1, 13, 26, 52)
+        Forecast horizons to calibrate independently.
 
     initial_alpha : dict or pd.Series, optional
-        Initial alpha for each horizon. Defaults to 1-target_coverage.
+        Initial significance level for each horizon.
+        Defaults to 1 - target_coverage.
 
     Returns
     -------
     pd.DataFrame
         Input dataframe with additional columns:
-        alpha_t, z_aci, lower_aci, upper_aci,
-        covered_aci, missed_aci.
+
+        alpha_t     : Adaptive significance level used for the
+                    current forecast interval.
+        z_aci       : Gaussian quantile corresponding to alpha_t.
+        lower_aci   : Lower prediction interval bound.
+        upper_aci   : Upper prediction interval bound.
+        missed_aci  : 1.0 if the observed value falls outside the
+                    interval; otherwise 0.0.
+        covered_aci : 1.0 if the observed value falls inside the
+                    interval; otherwise 0.0.
 
     Notes
     -----
-    This implements delayed-feedback ACI-style adaptation of
-    Gaussian prediction intervals.
+    The ACI update rule (Gibbs & Candès, 2021) is:
 
-    It does not establish distribution-free or conditional
-    coverage guarantees for these multi-horizon forecasts.
+        alpha_{t+1} = alpha_t + gamma * (alpha_target - missed_t)
+
+    When an interval is missed, alpha decreases, producing wider
+    subsequent intervals. When an interval contains the observation,
+    alpha increases slightly, allowing subsequent intervals to narrow.
+
+    In this implementation, forecast errors are placed in a pending
+    queue and alpha is updated only after their target dates have
+    been reached. Each forecast horizon maintains an independent
+    alpha sequence.
+
+    This is an ACI-style adaptation of Gaussian prediction intervals.
+    The theoretical coverage guarantees of the original ACI method
+    should not be assumed to hold automatically for this
+    overlapping, multi-horizon implementation.
+
+    The resulting intervals are adaptive prediction intervals,
+    not a recalibrated predictive distribution. Consequently,
+    PIT values and CRPS should not be interpreted as though ACI
+    had produced a new Gaussian predictive distribution.
     """
-# original markdown docstring
-    """
-    Adaptive Conformal Inference (Gibbs & Candès 2021) applied to
-    rolling-origin probabilistic forecasts.  
 
-    Adjusts the significance level alpha_t at each origin based on recent
-    miscoverage, providing marginal coverage guarantees under distribution
-    shift. Operates independently per forecast horizon.
-
-    Parameters
-    ----------
-    rolling_crps_df : pd.DataFrame
-        Output from rolling_crps() containing columns:
-        mu (or y_pred), sigma (or sigma_calibrated), y_true, horizon, origin.
-    sigma_col : str, default 'sigma'
-        Column to use as the base uncertainty estimate. Pass
-        'sigma_calibrated' when applying ACI after variance scaling.
-    target_coverage : float, default 0.95
-        Desired nominal coverage level (e.g. 0.95 for 95% intervals).
-    gamma : float, default 0.05
-        Adaptation rate controlling the speed/stability tradeoff.
-        - Larger gamma (0.10-0.20): faster adaptation to regime shifts,
-          but produces more volatile interval widths.
-        - Smaller gamma (0.01-0.02): smoother, more stable intervals,
-          but slower to respond to structural changes.
-        Recommended range: 0.02-0.10. Select via grid search over
-        empirical coverage and alpha stability.
-    horizons : tuple of int, default (1, 13, 26, 52)
-        Forecast horizons to calibrate. ACI is applied independently
-        at each horizon using its own alpha_t sequence.
-
-    Returns
-    -------
-    pd.DataFrame
-        Input DataFrame with added columns:
-        - alpha_t     : adapted significance level at each origin
-        - z_aci       : normal quantile corresponding to alpha_t
-                        (wider than 1.96 when coverage has been low)
-        - lower_aci   : lower prediction interval bound
-        - upper_aci   : upper prediction interval bound
-        - covered_aci : 1.0 if y_true fell inside [lower_aci, upper_aci],
-                        0.0 otherwise
-
-    Notes
-    -----
-    ACI update rule (Gibbs & Candès 2021, Eq. 1):
-        alpha_{t+1} = alpha_t + gamma · (alpha_target - 1{miscovered_t})
-
-    When the interval is missed (miscovered=1), alpha decreases, widening
-    subsequent intervals. When covered (miscovered=0), alpha increases
-    slightly, allowing intervals to narrow. The clip to [0.001, 0.999]
-    prevents degenerate intervals.
-
-    pit_aci is not computed because ACI intervals are adaptive and do not
-    correspond to a fixed predictive distribution. Use covered_aci and
-    rolling coverage plots for calibration assessment instead.
-    """
     # Validate inputs
     if not 0 < target_coverage < 1:
         raise ValueError("target_coverage must be between 0 and 1.")

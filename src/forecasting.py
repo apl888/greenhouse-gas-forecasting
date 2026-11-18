@@ -146,26 +146,31 @@ def single_origin_forecast(
 # Evaluate forecasts
 # ---------------------------------------------------------
 
-def evaluate_forecasts(forecast_df, test_series):
+def evaluate_forecasts(
+    forecast_df,
+    test_series,
+    coverages=(0.80, 0.90, 0.95)
+):
     """
-    Evaluate a single-origin forecast against the observed test series.
+    Evaluate a single-origin forecast against observed test data.
 
     Returns
     -------
     evaluated_df : pd.DataFrame
         Individual forecasts with observed values and evaluation metrics.
-    summary_df : pd.DataFrame
-        Overall metrics and metrics grouped by forecast horizon.
+    point_summary_df : pd.DataFrame
+        Point-forecast metrics overall and by horizon group.
+    interval_summary_df : pd.DataFrame
+        Probabilistic metrics for forecasts with predictive standard deviations.
     """
 
-    required_cols = {
-        'date', 'horizon', 'mu', 'sigma',
-        'lower_95', 'upper_95', 'model'
-    }
+    required_cols = {'date', 'horizon', 'mu', 'model'}
 
     missing_cols = required_cols.difference(forecast_df.columns)
     if missing_cols:
         raise ValueError(f"Missing forecast columns: {missing_cols}")
+
+    has_uncertainty = 'sigma' in forecast_df.columns
 
     if forecast_df['date'].duplicated().any():
         raise ValueError("Forecast dates must be unique.")
@@ -177,6 +182,13 @@ def evaluate_forecasts(forecast_df, test_series):
         raise ValueError(
             "Forecast and test series must contain the same number of dates."
         )
+
+    # Validate requested coverage levels.
+    if not coverages or any(not 0 < c < 1 for c in coverages):
+        raise ValueError("Coverage levels must be between 0 and 1.")
+
+    if len(set(coverages)) != len(coverages):
+        raise ValueError("Coverage levels must be unique.")
 
     # Add observed values to the forecast DataFrame.
     observed = (
@@ -198,54 +210,37 @@ def evaluate_forecasts(forecast_df, test_series):
 
     evaluated_df = evaluated_df.drop(columns='_merge')
 
-    # Check forecast values before calculating metrics.
-    numeric_cols = ['mu', 'sigma', 'lower_95', 'upper_95', 'y_true']
+    # Check forecast values.
+    numeric_cols = ['mu', 'y_true']
+
+    if has_uncertainty:
+        numeric_cols.append('sigma')
 
     if not np.isfinite(evaluated_df[numeric_cols].to_numpy()).all():
         raise ValueError("Forecast or observed values contain non-finite values.")
 
-    if (evaluated_df['sigma'] <= 0).any():
+    if has_uncertainty and (evaluated_df['sigma'] <= 0).any():
         raise ValueError("All predictive standard deviations must be positive.")
-
-    if (evaluated_df['lower_95'] >= evaluated_df['upper_95']).any():
-        raise ValueError("Lower interval limits must be below upper limits.")
 
     if not evaluated_df['horizon'].between(1, 105).all():
         raise ValueError("Forecast horizons must be between 1 and 105.")
+
+    evaluated_df = evaluated_df.sort_values('horizon').reset_index(drop=True)
 
     # Point forecast errors: positive values indicate underprediction.
     evaluated_df['error'] = evaluated_df['y_true'] - evaluated_df['mu']
     evaluated_df['absolute_error'] = evaluated_df['error'].abs()
     evaluated_df['squared_error'] = evaluated_df['error'] ** 2
 
-    # Analytical CRPS for Gaussian predictive distributions.
-    z = evaluated_df['error'] / evaluated_df['sigma']
+    # Calculate Gaussian CRPS when predictive standard deviations are available.
+    if has_uncertainty:
+        z = evaluated_df['error'] / evaluated_df['sigma']
 
-    evaluated_df['crps'] = evaluated_df['sigma'] * (
-        z * (2 * norm.cdf(z) - 1)
-        + 2 * norm.pdf(z)
-        - 1 / np.sqrt(np.pi)
-    )
-
-    # 95% prediction interval metrics.
-    alpha = 0.05
-
-    evaluated_df['covered_95'] = (
-        (evaluated_df['y_true'] >= evaluated_df['lower_95'])
-        & (evaluated_df['y_true'] <= evaluated_df['upper_95'])
-    )
-
-    evaluated_df['interval_width'] = (
-        evaluated_df['upper_95'] - evaluated_df['lower_95']
-    )
-
-    evaluated_df['interval_score'] = (
-        evaluated_df['interval_width']
-        + (2 / alpha)
-        * (evaluated_df['lower_95'] - evaluated_df['y_true']).clip(lower=0)
-        + (2 / alpha)
-        * (evaluated_df['y_true'] - evaluated_df['upper_95']).clip(lower=0)
-    )
+        evaluated_df['crps'] = evaluated_df['sigma'] * (
+            z * (2 * norm.cdf(z) - 1)
+            + 2 * norm.pdf(z)
+            - 1 / np.sqrt(np.pi)
+        )
 
     # Group forecasts by lead time.
     evaluated_df['horizon_group'] = pd.cut(
@@ -254,38 +249,98 @@ def evaluate_forecasts(forecast_df, test_series):
         labels=['1–13', '14–26', '27–52', '53–105']
     )
 
-    # Calculate summary metrics for a set of forecasts.
-    def summarize(group, group_label):
+    # Helper for calculating summary metrics.
+    def summarize_point(group, group_label):
         return {
             'model': group['model'].iloc[0],
             'horizon_group': group_label,
             'n_forecasts': len(group),
             'mae': group['absolute_error'].mean(),
             'rmse': np.sqrt(group['squared_error'].mean()),
-            'bias': group['error'].mean(),
-            'mean_crps': group['crps'].mean(),
-            'coverage_95': group['covered_95'].mean(),
-            'mean_interval_width': group['interval_width'].mean(),
-            'mean_interval_score': group['interval_score'].mean()
+            'bias': group['error'].mean()
         }
 
-    summary_rows = []
+    def get_groups():
+        groups = [('Overall', evaluated_df)]
 
-    # Overall performance.
-    summary_rows.append(summarize(evaluated_df, 'Overall'))
+        for group_label in ['1–13', '14–26', '27–52', '53–105']:
+            group = evaluated_df[
+                evaluated_df['horizon_group'] == group_label
+            ]
 
-    # Performance by forecast horizon.
-    for group_label in ['1–13', '14–26', '27–52', '53–105']:
-        group = evaluated_df[
-            evaluated_df['horizon_group'] == group_label
-        ]
+            if not group.empty:
+                groups.append((group_label, group))
 
-        if not group.empty:
-            summary_rows.append(summarize(group, group_label))
+        return groups
 
-    summary_df = pd.DataFrame(summary_rows)
+    # Point forecast summaries.
+    point_summary_df = pd.DataFrame([
+        summarize_point(group, group_label)
+        for group_label, group in get_groups()
+    ])
 
-    return evaluated_df, summary_df
+    # Return point metrics only for forecasts without predictive variance.
+    if not has_uncertainty:
+        return evaluated_df, point_summary_df, pd.DataFrame()
+
+    # Calculate prediction intervals at each requested coverage level.
+    interval_rows = []
+
+    for coverage in coverages:
+
+        alpha = 1 - coverage
+        z_value = norm.ppf(1 - alpha / 2)
+
+        suffix = int(round(coverage * 100))
+
+        lower_col = f'lower_{suffix}'
+        upper_col = f'upper_{suffix}'
+        covered_col = f'covered_{suffix}'
+        width_col = f'interval_width_{suffix}'
+        score_col = f'interval_score_{suffix}'
+
+        evaluated_df[lower_col] = (
+            evaluated_df['mu'] - z_value * evaluated_df['sigma']
+        )
+
+        evaluated_df[upper_col] = (
+            evaluated_df['mu'] + z_value * evaluated_df['sigma']
+        )
+
+        evaluated_df[covered_col] = (
+            (evaluated_df['y_true'] >= evaluated_df[lower_col])
+            & (evaluated_df['y_true'] <= evaluated_df[upper_col])
+        )
+
+        evaluated_df[width_col] = (
+            evaluated_df[upper_col] - evaluated_df[lower_col]
+        )
+
+        evaluated_df[score_col] = (
+            evaluated_df[width_col]
+            + (2 / alpha)
+            * (evaluated_df[lower_col] - evaluated_df['y_true']).clip(lower=0)
+            + (2 / alpha)
+            * (evaluated_df['y_true'] - evaluated_df[upper_col]).clip(lower=0)
+        )
+
+        # Summarize interval performance overall and by horizon group.
+        for group_label, group in get_groups():
+
+            interval_rows.append({
+                'model': group['model'].iloc[0],
+                'horizon_group': group_label,
+                'coverage_level': suffix,
+                'n_forecasts': len(group),
+                'mean_crps': group['crps'].mean(),
+                'coverage': group[covered_col].mean(),
+                'mean_interval_width': group[width_col].mean(),
+                'mean_interval_score': group[score_col].mean()
+            })
+
+    interval_summary_df = pd.DataFrame(interval_rows)
+
+    return evaluated_df, point_summary_df, interval_summary_df
 
 # ---------------------------------------------------------
 # sanity check for refitting model on full series

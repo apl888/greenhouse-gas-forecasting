@@ -130,13 +130,13 @@ def single_origin_forecast(
     # Construct forecast dataframe
 
     forecast_df = pd.DataFrame({
-        'date': forecast_index,
-        'horizon': np.arange(1, n_forecast + 1),
-        'mu': mu,
-        'sigma': sigma,
-        'lower': lower,
-        'upper': upper,
-        'model': model_name,
+        'date'    : forecast_index,
+        'horizon' : np.arange(1, n_forecast + 1),
+        'mu'      : mu,
+        'sigma'   : sigma,
+        'lower_95': lower,
+        'upper_95': upper,
+        'model'   : model_name,
     })
 
     return forecast_df

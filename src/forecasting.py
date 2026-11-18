@@ -8,7 +8,7 @@ from statsmodels.stats.diagnostic import acorr_ljungbox
 from .model_evaluation import residual_diagnostics 
 
 # ---------------------------------------------------------
-# single-origin forecasting
+# Single-origin forecasting
 # ---------------------------------------------------------
 
 def single_origin_forecast(
@@ -143,135 +143,149 @@ def single_origin_forecast(
 
 
 # ---------------------------------------------------------
-# single-origin forecasting
+# Evaluate forecasts
 # ---------------------------------------------------------
 
-# def single_origin_forecast(
-#     fitted_result,
-#     test_series,
-#     exog_test,
-#     scale_factors,
-#     final_alpha,
-#     target_coverage=0.95,
-# ):
-#     """
-#     Generate single-origin forecast over full test period with
-#     variance scaling and ACI initialization from training.
-    
-#     Parameters
-#     ----------
-#     fitted_result  : fitted statsmodels or sktime model result
-#     test_series    : pd.Series — test observations with DatetimeIndex
-#     exog_test      : pd.DataFrame or None — exogenous variables for test period
-#     scale_factors  : pd.Series indexed by horizon — variance scaling factors
-#     final_alpha    : pd.Series indexed by horizon — ACI alpha at end of training
-#     target_coverage: float — nominal coverage level (default 0.95)
+def evaluate_forecasts(forecast_df, test_series):
+    """
+    Evaluate a single-origin forecast against the observed test series.
 
-#     Returns
-#     -------
-#     pd.DataFrame with one row per test week
-#     """
-#     n_test     = len(test_series)
-    
-#     # --- generate point forecasts and standard errors ----------
-    
-#     # statsmodels-style models
-#     if hasattr(fitted_result, "get_forecast"):
-#         fc = fitted_result.get_forecast(
-#             steps=n_test,
-#             exog=exog_test
-#         )
-#         mu = np.asarray(fc.predicted_mean).flatten()
-#         sigma = np.asarray(fc.se_mean).flatten()
-    
-#     # sktime-style models, including AutoETS
-#     elif hasattr(fitted_result, "predict"):
-#         fh = np.arange(1, n_test + 1)
-        
-#         # Only pass X if exog_test is not None
-#         predict_kwargs = {'fh': fh}
-#         if exog_test is not None:
-#             predict_kwargs['X'] = exog_test
-    
-#         y_pred = fitted_result.predict(**predict_kwargs)
-#         mu = np.asarray(y_pred).flatten()
-    
-#         var_kwargs = {'fh': fh}
-#         if exog_test is not None:
-#             var_kwargs['X'] = exog_test
-    
-#         pred_var = fitted_result.predict_var(**var_kwargs)
-        
-#         # predict_var is available in sktime's AutoETS but its output format can vary.
-#         # It sometimes returns a DataFrame with a MultiIndex column rather than a simple array. 
-#         # Add a defensive flatten:
-#         if hasattr(pred_var, 'values'):
-#             var = pred_var.values.flatten()
-#         else:
-#             var = np.asarray(pred_var).flatten()
-    
-#         # numerical safety
-#         var = np.maximum(var, 0)
-#         sigma = np.sqrt(var)
-    
-#     else:
-#         raise TypeError(
-#             f"Unsupported forecasting object: "
-#             f"{type(fitted_result).__name__}"
-#         )
+    Returns
+    -------
+    evaluated_df : pd.DataFrame
+        Individual forecasts with observed values and evaluation metrics.
+    summary_df : pd.DataFrame
+        Overall metrics and metrics grouped by forecast horizon.
+    """
 
-#     # --- pre-compute horizon caps once outside the loop ----------
-#     sf_horizons    = sorted(scale_factors.index.tolist())
-#     alpha_horizons = sorted(final_alpha.index.tolist())
-    
-#     # --- build per-horizon results ----------
-#     rows = []
-#     for i in range(n_test):
-#         h = i + 1
-        
-#         # Scale factor: use largest evaluation horizon <= h
-#         h_sf      = max([x for x in sf_horizons if x <= h], default=sf_horizons[0])
-#         sf        = scale_factors.loc[h_sf]
-#         sigma_cal = sigma[i] * sf
+    required_cols = {
+        'date', 'horizon', 'mu', 'sigma',
+        'lower_95', 'upper_95', 'model'
+    }
 
-#         # ACI alpha: use largest evaluation horizon <= h
-#         h_alpha = max([x for x in alpha_horizons if x <= h], default=alpha_horizons[0])
-#         alpha_t = final_alpha.loc[h_alpha]
-#         z_t = stats.norm.ppf(1 - alpha_t / 2)
-        
-#         lower = mu[i] - z_t * sigma_cal
-#         upper = mu[i] + z_t * sigma_cal
-#         y_true = test_series.iloc[i]
-        
-#         covered = float(lower <= y_true <= upper)
+    missing_cols = required_cols.difference(forecast_df.columns)
+    if missing_cols:
+        raise ValueError(f"Missing forecast columns: {missing_cols}")
 
-#         # analytical normal CRPS
-#         z_score = (y_true - mu[i]) / sigma_cal
-#         phi = stats.norm.pdf(z_score)
-#         Phi = stats.norm.cdf(z_score)
-#         crps = sigma_cal * (
-#             z_score*(2*Phi-1) 
-#             + 2*phi 
-#             - 1/np.sqrt(np.pi)
-#             )
+    if forecast_df['date'].duplicated().any():
+        raise ValueError("Forecast dates must be unique.")
 
-#         rows.append({
-#             'horizon'          : h,
-#             'date'             : test_series.index[i],
-#             'y_true'           : y_true,
-#             'y_pred'           : mu[i],
-#             'sigma'            : sigma[i],
-#             'sigma_calibrated' : sigma_cal,
-#             'lower_aci'        : lower,
-#             'upper_aci'        : upper,
-#             'covered_aci'      : covered,
-#             'alpha_t'          : alpha_t,
-#             'crps'             : crps,
-#             'error'            : mu[i] - y_true,
-#             'abs_error'        : abs(mu[i] - y_true),
-#         })
+    if test_series.index.duplicated().any():
+        raise ValueError("Test-series dates must be unique.")
 
-#     return pd.DataFrame(rows)
+    if len(forecast_df) != len(test_series):
+        raise ValueError(
+            "Forecast and test series must contain the same number of dates."
+        )
+
+    # Add observed values to the forecast DataFrame.
+    observed = (
+        test_series.rename('y_true')
+        .rename_axis('date')
+        .reset_index()
+    )
+
+    evaluated_df = forecast_df.merge(
+        observed,
+        on='date',
+        how='left',
+        validate='one_to_one',
+        indicator=True
+    )
+
+    if (evaluated_df['_merge'] != 'both').any():
+        raise ValueError("Some forecast dates do not match test-series dates.")
+
+    evaluated_df = evaluated_df.drop(columns='_merge')
+
+    # Check forecast values before calculating metrics.
+    numeric_cols = ['mu', 'sigma', 'lower_95', 'upper_95', 'y_true']
+
+    if not np.isfinite(evaluated_df[numeric_cols].to_numpy()).all():
+        raise ValueError("Forecast or observed values contain non-finite values.")
+
+    if (evaluated_df['sigma'] <= 0).any():
+        raise ValueError("All predictive standard deviations must be positive.")
+
+    if (evaluated_df['lower_95'] >= evaluated_df['upper_95']).any():
+        raise ValueError("Lower interval limits must be below upper limits.")
+
+    if not evaluated_df['horizon'].between(1, 105).all():
+        raise ValueError("Forecast horizons must be between 1 and 105.")
+
+    # Point forecast errors: positive values indicate underprediction.
+    evaluated_df['error'] = evaluated_df['y_true'] - evaluated_df['mu']
+    evaluated_df['absolute_error'] = evaluated_df['error'].abs()
+    evaluated_df['squared_error'] = evaluated_df['error'] ** 2
+
+    # Analytical CRPS for Gaussian predictive distributions.
+    z = evaluated_df['error'] / evaluated_df['sigma']
+
+    evaluated_df['crps'] = evaluated_df['sigma'] * (
+        z * (2 * norm.cdf(z) - 1)
+        + 2 * norm.pdf(z)
+        - 1 / np.sqrt(np.pi)
+    )
+
+    # 95% prediction interval metrics.
+    alpha = 0.05
+
+    evaluated_df['covered_95'] = (
+        (evaluated_df['y_true'] >= evaluated_df['lower_95'])
+        & (evaluated_df['y_true'] <= evaluated_df['upper_95'])
+    )
+
+    evaluated_df['interval_width'] = (
+        evaluated_df['upper_95'] - evaluated_df['lower_95']
+    )
+
+    evaluated_df['interval_score'] = (
+        evaluated_df['interval_width']
+        + (2 / alpha)
+        * (evaluated_df['lower_95'] - evaluated_df['y_true']).clip(lower=0)
+        + (2 / alpha)
+        * (evaluated_df['y_true'] - evaluated_df['upper_95']).clip(lower=0)
+    )
+
+    # Group forecasts by lead time.
+    evaluated_df['horizon_group'] = pd.cut(
+        evaluated_df['horizon'],
+        bins=[0, 13, 26, 52, 105],
+        labels=['1–13', '14–26', '27–52', '53–105']
+    )
+
+    # Calculate summary metrics for a set of forecasts.
+    def summarize(group, group_label):
+        return {
+            'model': group['model'].iloc[0],
+            'horizon_group': group_label,
+            'n_forecasts': len(group),
+            'mae': group['absolute_error'].mean(),
+            'rmse': np.sqrt(group['squared_error'].mean()),
+            'bias': group['error'].mean(),
+            'mean_crps': group['crps'].mean(),
+            'coverage_95': group['covered_95'].mean(),
+            'mean_interval_width': group['interval_width'].mean(),
+            'mean_interval_score': group['interval_score'].mean()
+        }
+
+    summary_rows = []
+
+    # Overall performance.
+    summary_rows.append(summarize(evaluated_df, 'Overall'))
+
+    # Performance by forecast horizon.
+    for group_label in ['1–13', '14–26', '27–52', '53–105']:
+        group = evaluated_df[
+            evaluated_df['horizon_group'] == group_label
+        ]
+
+        if not group.empty:
+            summary_rows.append(summarize(group, group_label))
+
+    summary_df = pd.DataFrame(summary_rows)
+
+    return evaluated_df, summary_df
 
 # ---------------------------------------------------------
 # sanity check for refitting model on full series

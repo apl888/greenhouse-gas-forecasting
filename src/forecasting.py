@@ -44,21 +44,20 @@ def single_origin_forecast(
     n_forecast = len(forecast_index)
 
     if n_forecast == 0:
-        raise ValueError("Forecast index cannot be empty.")
+        raise ValueError('Forecast index cannot be empty.')
 
     if not 0 < target_coverage < 1:
-        raise ValueError("target_coverage must be between 0 and 1.")
+        raise ValueError('target_coverage must be between 0 and 1.')
 
     if exog is not None and len(exog) != n_forecast:
         raise ValueError(
-            "Exogenous variables must match the forecast horizon."
+            'Exogenous variables must match the forecast horizon.'
         )
-
 
     # Generate point forecasts and predictive variances
 
     # Statsmodels-style models
-    if hasattr(fitted_result, "get_forecast"):
+    if hasattr(fitted_result, 'get_forecast'):
 
         forecast_kwargs = {'steps': n_forecast}
 
@@ -105,14 +104,14 @@ def single_origin_forecast(
 
     if len(mu) != n_forecast or len(variance) != n_forecast:
         raise ValueError(
-            "Forecast output length does not match forecast horizon."
+            'Forecast output length does not match forecast horizon.'
         )
 
     if not np.all(np.isfinite(mu)):
-        raise ValueError("Non-finite point forecasts detected.")
+        raise ValueError('Non-finite point forecasts detected.')
 
     if not np.all(np.isfinite(variance)):
-        raise ValueError("Non-finite predictive variances detected.")
+        raise ValueError('Non-finite predictive variances detected.')
 
     # Protect against small negative numerical values
     variance = np.maximum(variance, 0)
@@ -141,6 +140,137 @@ def single_origin_forecast(
 
     return forecast_df
 
+
+# ---------------------------------------------------------
+# Original single-origin forecasting
+# ---------------------------------------------------------
+
+# def single_origin_forecast(
+#     fitted_result,
+#     test_series,
+#     exog_test,
+#     scale_factors,
+#     final_alpha,
+#     target_coverage=0.95,
+# ):
+#     """
+#     Generate single-origin forecast over full test period with
+#     variance scaling and ACI initialization from training.
+    
+#     Parameters
+#     ----------
+#     fitted_result  : fitted statsmodels or sktime model result
+#     test_series    : pd.Series — test observations with DatetimeIndex
+#     exog_test      : pd.DataFrame or None — exogenous variables for test period
+#     scale_factors  : pd.Series indexed by horizon — variance scaling factors
+#     final_alpha    : pd.Series indexed by horizon — ACI alpha at end of training
+#     target_coverage: float — nominal coverage level (default 0.95)
+
+#     Returns
+#     -------
+#     pd.DataFrame with one row per test week
+#     """
+#     n_test     = len(test_series)
+    
+#     # --- generate point forecasts and standard errors ----------
+    
+#     # statsmodels-style models
+#     if hasattr(fitted_result, "get_forecast"):
+#         fc = fitted_result.get_forecast(
+#             steps=n_test,
+#             exog=exog_test
+#         )
+#         mu = np.asarray(fc.predicted_mean).flatten()
+#         sigma = np.asarray(fc.se_mean).flatten()
+    
+#     # sktime-style models, including AutoETS
+#     elif hasattr(fitted_result, "predict"):
+#         fh = np.arange(1, n_test + 1)
+        
+#         # Only pass X if exog_test is not None
+#         predict_kwargs = {'fh': fh}
+#         if exog_test is not None:
+#             predict_kwargs['X'] = exog_test
+    
+#         y_pred = fitted_result.predict(**predict_kwargs)
+#         mu = np.asarray(y_pred).flatten()
+    
+#         var_kwargs = {'fh': fh}
+#         if exog_test is not None:
+#             var_kwargs['X'] = exog_test
+    
+#         pred_var = fitted_result.predict_var(**var_kwargs)
+        
+#         # predict_var is available in sktime's AutoETS but its output format can vary.
+#         # It sometimes returns a DataFrame with a MultiIndex column rather than a simple array. 
+#         # Add a defensive flatten:
+#         if hasattr(pred_var, 'values'):
+#             var = pred_var.values.flatten()
+#         else:
+#             var = np.asarray(pred_var).flatten()
+    
+#         # numerical safety
+#         var = np.maximum(var, 0)
+#         sigma = np.sqrt(var)
+    
+#     else:
+#         raise TypeError(
+#             f"Unsupported forecasting object: "
+#             f"{type(fitted_result).__name__}"
+#         )
+
+#     # --- pre-compute horizon caps once outside the loop ----------
+#     sf_horizons    = sorted(scale_factors.index.tolist())
+#     alpha_horizons = sorted(final_alpha.index.tolist())
+    
+#     # --- build per-horizon results ----------
+#     rows = []
+#     for i in range(n_test):
+#         h = i + 1
+        
+#         # Scale factor: use largest evaluation horizon <= h
+#         h_sf      = max([x for x in sf_horizons if x <= h], default=sf_horizons[0])
+#         sf        = scale_factors.loc[h_sf]
+#         sigma_cal = sigma[i] * sf
+
+#         # ACI alpha: use largest evaluation horizon <= h
+#         h_alpha = max([x for x in alpha_horizons if x <= h], default=alpha_horizons[0])
+#         alpha_t = final_alpha.loc[h_alpha]
+#         z_t = stats.norm.ppf(1 - alpha_t / 2)
+        
+#         lower = mu[i] - z_t * sigma_cal
+#         upper = mu[i] + z_t * sigma_cal
+#         y_true = test_series.iloc[i]
+        
+#         covered = float(lower <= y_true <= upper)
+
+#         # analytical normal CRPS
+#         z_score = (y_true - mu[i]) / sigma_cal
+#         phi = stats.norm.pdf(z_score)
+#         Phi = stats.norm.cdf(z_score)
+#         crps = sigma_cal * (
+#             z_score*(2*Phi-1) 
+#             + 2*phi 
+#             - 1/np.sqrt(np.pi)
+#             )
+
+#         rows.append({
+#             'horizon'          : h,
+#             'date'             : test_series.index[i],
+#             'y_true'           : y_true,
+#             'y_pred'           : mu[i],
+#             'sigma'            : sigma[i],
+#             'sigma_calibrated' : sigma_cal,
+#             'lower_aci'        : lower,
+#             'upper_aci'        : upper,
+#             'covered_aci'      : covered,
+#             'alpha_t'          : alpha_t,
+#             'crps'             : crps,
+#             'error'            : mu[i] - y_true,
+#             'abs_error'        : abs(mu[i] - y_true),
+#         })
+
+#     return pd.DataFrame(rows)
 
 # ---------------------------------------------------------
 # Evaluate forecasts

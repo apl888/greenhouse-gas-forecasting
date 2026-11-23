@@ -87,7 +87,7 @@ def single_origin_forecast(
         y_pred = fitted_result.predict(**predict_kwargs)
         mu = np.asarray(y_pred).reshape(-1)
 
-        var_kwargs = {'fh': fh}
+        var_kwargs = {'fh': fh}0
         if exog is not None:
             var_kwargs['X'] = exog
 
@@ -312,6 +312,16 @@ def evaluate_forecasts(
         raise ValueError(
             "Forecast and test series must contain the same number of dates."
         )
+        
+    # Validate forecast-date alignment and chronological order.
+    # (checks that the forecast dates match the test-series dates in exactly the same order)
+    if not pd.DatetimeIndex(forecast_df['date']).equals(
+        test_series.index
+    ):
+        raise ValueError(
+            'Forecast dates must match the test-series index '
+            'in the same order.'
+        )
 
     # Validate requested coverage levels.
     if not coverages or any(not 0 < c < 1 for c in coverages):
@@ -436,6 +446,19 @@ def evaluate_forecasts(
         evaluated_df[upper_col] = (
             evaluated_df['mu'] + z_value * evaluated_df['sigma']
         )
+        
+        # Validate prediction intervals.
+        lower = evaluated_df[lower_col].to_numpy()
+        upper = evaluated_df[upper_col].to_numpy()
+
+        if not (
+            np.isfinite(lower).all()
+            and np.isfinite(upper).all()
+            and (lower < upper).all()
+        ):
+            raise ValueError(
+                'Invalid prediction intervals detected.'
+            )
 
         evaluated_df[covered_col] = (
             (evaluated_df['y_true'] >= evaluated_df[lower_col])
